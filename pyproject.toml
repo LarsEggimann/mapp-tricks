@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mapp_tricks"
+version = "0.1.0"
+authors = [
+    {name = "Lars Eggimann", email = "lars.eggimann@gmail.com"},
+]
+description = "Reusable code developed during my PhD in the Medical Applications of Particle Physics group at the University of Bern."
