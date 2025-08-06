@@ -241,7 +241,7 @@ class PeakFitter:
                 return basename
         files = sorted(files, key=sort_key)
 
-        print(f"Found {len(files)} files to process.")
+        print(f"peakfit found {len(files)} files to process.")
         
         if not files:
             raise ValueError(f"No files found matching pattern '{file_pattern}' in {folder_path}")
@@ -251,7 +251,7 @@ class PeakFitter:
             output_dir = os.path.join(folder_path, "results")
         
         if save_plots:
-            plots_dir = os.path.join(output_dir, "fits")
+            plots_dir = os.path.join(output_dir, "peakfit_fits")
             os.makedirs(plots_dir, exist_ok=True)
         
         results = []
@@ -306,9 +306,8 @@ class PeakFitter:
                                      errors='ignore')
         
         os.makedirs(output_dir, exist_ok=True)
-        csv_results.to_csv(os.path.join(output_dir, "results.csv"), index=False)
-        
-        print(f"Results saved to {output_dir}")
-        print(f"Processed {len(results)} files successfully")
+        csv_results.to_csv(os.path.join(output_dir, "peakfit_results.csv"), index=False)
+
+        print(f"peakfit processed {len(results)} files and saved results to {output_dir}/peakfit_results.csv")
         
         return return_results

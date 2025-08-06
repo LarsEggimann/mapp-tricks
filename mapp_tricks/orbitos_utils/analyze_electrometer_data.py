@@ -144,6 +144,12 @@ def analyze_electrometer_data(path_to_csv: str):
     )
 
     # Save the plot as HTML
-    fig.write_html(os.path.join(os.path.dirname(path_to_csv), f'current_vs_time_{beam_start_time}.html'))
+    results_path = os.path.join(os.path.dirname(path_to_csv), 'results')
+    os.makedirs(results_path, exist_ok=True)
+    file_name = os.path.basename(path_to_csv)
+    # remove file extension for the plot name
+    file_name = os.path.splitext(file_name)[0]
+
+    fig.write_html(os.path.join(results_path, f'{file_name}_plot.html'))
 
     return beam_data
