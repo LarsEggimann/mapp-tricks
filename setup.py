@@ -12,5 +12,5 @@ setup(
     description="Reusable code developed during my PhD in the Medical Applications of Particle Physics group at the University of Bern. ",
     include_package_data=True,
     zip_safe=False,
-    packages=['orbitos_utils', 'peakfit', 'spectrometer_calibrations'],
+    packages=['mapp_tricks'],
 )
