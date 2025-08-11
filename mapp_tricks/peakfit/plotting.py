@@ -169,7 +169,6 @@ def plot_plotly(res: dict, df: pd.DataFrame,
         yaxis_title="Counts (log scale)",
         hovermode='x unified',
         showlegend=True,
-        width=800,
         height=800,
         template='plotly_white'
     )
