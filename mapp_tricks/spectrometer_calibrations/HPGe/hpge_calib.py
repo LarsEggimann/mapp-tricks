@@ -3,6 +3,7 @@ import pandas as pd # type: ignore
 import numpy as np # type: ignore
 from scipy.optimize import curve_fit # type: ignore
 from uncertainties import ufloat, unumpy as unp, Variable # type: ignore
+from uncertainties.umath import exp # pylint: disable=no-name-in-module
 import matplotlib.pyplot as plt # type: ignore
 from matplotlib.figure import Figure
 
@@ -198,12 +199,12 @@ class HPGeCalibration:
         efficiency = self.evaluate_efficiency_at_energy(peak_energy)
         decay_constant = np.log(2) / half_life  # decay constant [1/s]
 
-        return (peak_area / (life_time * efficiency * branching_ratio)) * (decay_constant * real_time) / (1 - np.exp(-decay_constant * real_time))
+        return (peak_area / (life_time * efficiency * branching_ratio)) * (decay_constant * real_time) / (1 - exp(-decay_constant * real_time))
 
     def get_activity_for_peak_at_end_of_beam(self, peak_area: ufloat, peak_energy, life_time, real_time, cooling_time, branching_ratio, half_life) -> ufloat:
         """
-        Calculate the activity for a given peak at the end of beam.
-        - peak_area: net peak area [#counts], can be a ufloat
+        Calculate the activity for a given peak at the end of beam. all parameters can be ufloat
+        - peak_area: net peak area [#counts]
         - peak_energy: energy of the peak [keV], used to calculate the detector efficiency
         - life_time: life time of the measurement [s]
         - real_time: real time of the measurement [s]
@@ -213,7 +214,7 @@ class HPGeCalibration:
         """
         decay_constant = np.log(2) / half_life  # decay constant [1/s]
         activity_at_start_of_spectra_measurement = self.get_activity_for_peak_at_start_of_measurement(peak_area, peak_energy, life_time, real_time, branching_ratio, half_life)
-        return activity_at_start_of_spectra_measurement * np.exp(decay_constant * cooling_time)  # activity at end of beam
+        return activity_at_start_of_spectra_measurement * exp(decay_constant * cooling_time)  # activity at end of beam
 
     # code from sofia:
     # def cross_section(A, lambda_, t_i, t_c, Q, m, eps, n_sto, A_C, err_A, err_eps, err_m, err_lambda, err_Q):
@@ -239,5 +240,5 @@ class HPGeCalibration:
         decay_constant = np.log(2) / half_life
 
         cross_section = (activity_at_end_of_beam * q * t_irradiation * collimator_area / integrated_charge) * (molar_mass / (target_mass * N_A * isotopic_abundance * n_sto))
-        cross_section = cross_section / (1 - np.exp(-decay_constant * t_irradiation))  # adjust for the irradiation time
+        cross_section = cross_section / (1 - exp(-decay_constant * t_irradiation))  # adjust for the irradiation time
         return cross_section * 1e24  # conversion to barn

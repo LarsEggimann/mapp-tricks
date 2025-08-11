@@ -1,4 +1,4 @@
-from uncertainties import ufloat
+from uncertainties import ufloat # type: ignore
 from ..peakfit import PeakFitter
 from ..orbitos_utils import analyze_electrometer_data
 from ..spectrometer_calibrations import HPGeCalibration
@@ -36,7 +36,7 @@ def do_cross_section_analysis(
         half_life=target.half_life,
     )
 
-    print(f"Activity at end of beam: {A_EoB:.5f} Bq")
+    print(f"Activity at end of beam: {A_EoB:.10f} Bq")
 
     cs = calibration.get_cross_section(
         activity_at_end_of_beam=A_EoB,
@@ -50,7 +50,7 @@ def do_cross_section_analysis(
         integrated_charge=electrometer_data.integrated_charge # C
     )
 
-    print(f"Cross section: {cs:.5f} barn")
+    print(f"Cross section: {cs*1e3:.10f} mb")
 
     return CrossSectionAnalysisResults(
         activity_end_of_beam=A_EoB,
