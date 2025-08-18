@@ -38,37 +38,41 @@ def parse_spectrum_file(filepath):
             start_time = ':'.join(line.split(":")[1:]).strip()
             start_time = datetime.strptime(start_time, "%Y-%m-%d, %H:%M:%S")
             break
+        # StartTime: 2025-08-15T15:20:33.988032
+        if line.startswith("StartTime:"):
+            start_time = datetime.fromisoformat(':'.join(line.split(":")[1:]).strip())
+            break
 
     # Extract real_time
     real_time = None
     for line in lines:
-        if line.startswith("# Real time (s):"):
-            real_time = float(line.split(":")[1].strip())
+        if line.startswith("# Real time (s):") or line.startswith("RealTime: "):
+            real_time = float(line.split(":")[1].split()[0].strip())
             break
 
     # Extract live_time
     live_time = None
     for line in lines:
-        if line.startswith("# Live time (s):"):
-            live_time = float(line.split(":")[1].strip())
+        if line.startswith("# Live time (s):") or line.startswith("LiveTime: "):
+            live_time = float(line.split(":")[1].split()[0].strip())
             break
     
-    # Extract energy calibration
-    for i, line in enumerate(lines):
-        if line.startswith("#     A0:"):
-            A0 = float(line.split(":")[1])
-            A1 = float(lines[i+1].split(":")[1])
-            A2 = float(lines[i+2].split(":")[1])
-            A3 = float(lines[i+3].split(":")[1])
-            break
-    
-    # Find start of data
-    for i, line in enumerate(lines):
-        if line.startswith("#-----------------------------------------------------------------------"):
-            data_start = i + 1
-            break
-    
-    df = pd.read_csv(filepath, sep='\t', skiprows=data_start, 
+    # Find format of data if first line is "#" then we have converted from cnf
+    if lines[0].startswith("#"):
+        for i, line in enumerate(lines):
+            if line.startswith("#-----------------------------------------------------------------------"):
+                data_start = i + 1
+                break
+        df = pd.read_csv(filepath, sep='\t', skiprows=data_start, 
                      names=["channel", "energy", "counts", "rate"])
 
-    return df, (A0, A1, A2, A3), start_time, real_time, live_time
+    else:
+        # InterSpect text output format
+        for i, line in enumerate(lines):
+            if line.startswith("Channel Energy Counts"):
+                data_start = i + 1
+                break
+        df = pd.read_csv(filepath, sep=' ', skiprows=data_start, 
+                     names=["channel", "energy", "counts"])
+
+    return df, (0, 0, 0, 0), start_time, real_time, live_time

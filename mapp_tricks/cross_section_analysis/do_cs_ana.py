@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from uncertainties import ufloat # type: ignore
 from ..peakfit import PeakFitter
 from ..orbitos_utils import analyze_electrometer_data
@@ -36,7 +37,19 @@ def do_cross_section_analysis(
         half_life=target.half_life,
     )
 
-    print(f"Activity at end of beam: {A_EoB:.10f} Bq")
+    A_start_of_spectra = calibration.get_activity_for_peak_at_start_of_measurement(
+        peak_area=spectra_data.area,
+        peak_energy=spectra_data.centroid,
+        life_time=spectra_data.live_time,
+        real_time=spectra_data.real_time,
+        branching_ratio=target.branching_ratio,
+        half_life=target.half_life,
+    )
+    spectra_end = spectra_data.start_time + timedelta(seconds=spectra_data.real_time)
+    print(f'Spectra Start Time: {spectra_data.start_time}, Spectra End Time: {spectra_end}')
+    print(f"Beam Start Time: {electrometer_data.start_of_beam}, Beam End Time: {electrometer_data.end_of_beam}")
+    print(f"Activity at end of beam: {A_EoB:.10f} Bq, cooling time: {cooling_time:.10f} s")
+    print(f"Activity at start of spectra recording: {A_start_of_spectra:.10f} Bq")
 
     cs = calibration.get_cross_section(
         activity_at_end_of_beam=A_EoB,
