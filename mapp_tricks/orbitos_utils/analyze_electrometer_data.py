@@ -51,8 +51,8 @@ def analyze_electrometer_data(path_to_csv: str):
     # Convert timestamps to datetime
     df['datetime'] = [datetime.fromtimestamp(ts) for ts in df['timestamp']]
 
-    # Find beam start and end times (current above 50e-12 A)
-    beam_threshold = 50e-12
+    # Find beam start and end times (current above 100e-12 A)
+    beam_threshold = 400e-12
     beam_mask = df['current'] > beam_threshold
 
     # Find beam start and end indices
