@@ -216,6 +216,25 @@ class HPGeCalibration:
         activity_at_start_of_spectra_measurement = self.get_activity_for_peak_at_start_of_measurement(peak_area, peak_energy, life_time, real_time, branching_ratio, half_life)
         return activity_at_start_of_spectra_measurement * exp(decay_constant * cooling_time)  # activity at end of beam
 
+    def get_activity_at_end_of_beam_with_known_cross_section(self, cross_section: ufloat, half_life, t_irradiation, integrated_charge, target_mass, molar_mass, isotopic_abundance, n_sto, collimator_area) -> ufloat:
+        """
+        Calculate the activity at the end of the beam with a known cross section.
+        - cross_section: cross section [barn], can be a ufloat
+        - half_life: half life of the isotope [s]
+        - t_irradiation: irradiation time [s]
+        - integrated_charge: integrated charge during the measurement [C]
+        - target_mass: mass of the target [g]
+        - molar_mass: molar mass of the target element [g/mol]
+        - isotopic_abundance: isotopic abundance of the target element
+        - n_sto: stoichiometric coefficient in the reaction
+        - collimator_area: area of the collimator [cm^2]
+        """
+        N_A = 6.022140857E+23 #avogadro number [1/mol]
+        q = 1.6021766208E-19 #elementary charge [C]
+        decay_constant = np.log(2) / half_life  # decay constant [1/s]
+        cross_section_cm_from_barn = cross_section * 1e-24  # conversion from barn to cm^2
+        return ((cross_section_cm_from_barn * integrated_charge * target_mass * N_A * isotopic_abundance * n_sto) / (t_irradiation * q * collimator_area * molar_mass)) * (1 - exp(-decay_constant * t_irradiation))
+
     # code from sofia:
     # def cross_section(A, lambda_, t_i, t_c, Q, m, eps, n_sto, A_C, err_A, err_eps, err_m, err_lambda, err_Q):
     #     A_EOB = A* np.exp(lambda_*t_c)
