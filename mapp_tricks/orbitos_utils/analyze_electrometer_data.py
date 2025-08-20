@@ -43,7 +43,7 @@ def analyze_electrometer_data(path_to_csv: str):
     if not os.path.exists(path_to_csv):
         raise FileNotFoundError(f"File not found: {path_to_csv}")
     else:
-        print(f"Processing file: {path_to_csv}")
+        print(f"orbitos-util - processing electrometer data: {path_to_csv}")
 
     # Read the CSV file
     df = pd.read_csv(path_to_csv)

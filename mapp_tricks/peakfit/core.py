@@ -14,8 +14,21 @@ import pandas as pd # type: ignore
 from lmfit.models import GaussianModel, LinearModel # type: ignore
 from uncertainties import ufloat # type: ignore
 from tqdm import tqdm # type: ignore
+from scipy.optimize import curve_fit # type: ignore
 
 from .parser import parse_spectrum_file
+
+def linear_func(x, m, b):
+    """Linear function: y = mx + b"""
+    return m * x + b
+
+def gaussian_func(x, amp, center, sigma):
+    """Gaussian function"""
+    return (amp / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - center) ** 2) / (2 * sigma ** 2))
+
+def linear_gaussian_model(x, m, b, amp, center, sigma):
+    """Combined linear and Gaussian model."""
+    return linear_func(x, m, b) + gaussian_func(x, amp, center, sigma)
 
 class PeakFitterResult:
     """
@@ -31,8 +44,6 @@ class PeakFitterResult:
         Amplitude of the peak in counts
     sigma : ufloat
         Standard deviation of the Gaussian fit in keV
-    fwhm : ufloat
-        Full width at half maximum of the peak in keV
 
     Methods
     -------
@@ -41,8 +52,7 @@ class PeakFitterResult:
     """
     def __init__(self, area: ufloat, centroid: ufloat,
                  start_time: datetime, real_time: float, live_time: float,
-                 amplitude: ufloat, sigma: ufloat,
-                 fwhm: ufloat):
+                 amplitude: ufloat, sigma: ufloat):
         self.area = area
         self.centroid = centroid
         self.start_time = start_time
@@ -50,7 +60,6 @@ class PeakFitterResult:
         self.live_time = live_time
         self.amplitude = amplitude
         self.sigma = sigma
-        self.fwhm = fwhm
 
 
     def __repr__(self):
@@ -58,22 +67,9 @@ class PeakFitterResult:
                 f"centroid={self.centroid:.2f}, "
                 f"amplitude={self.amplitude:.2f}, "
                 f"sigma={self.sigma:.2f}, "
-                f"fwhm={self.fwhm:.2f}, "
                 f"start_time={self.start_time}, "
                 f"real_time={self.real_time:.2f}, "
                 f"live_time={self.live_time:.2f})")
-
-
-
-def linear_func(x: np.ndarray, m: float, b: float):
-    """Linear function: y = mx + b"""
-    return m * x + b
-
-
-def gaussian_func(x: np.ndarray, amp: float, center: float, sigma: float):
-    """Gaussian function"""
-    return amp / (sigma * np.sqrt(2 * np.pi)) * np.exp(-((x - center) ** 2) / (2 * sigma ** 2))
-
 
 class PeakFitter:
     """
@@ -117,52 +113,36 @@ class PeakFitter:
         x = df_peak['energy'].values
         y = df_peak['counts'].values
         
-        # Set up parameters
-        params = self.model.make_params()
-        
-        # Set background parameters
-        bg_params = background_params or {'intercept': 666, 'slope': -0.3}
-        params['b_intercept'].set(value=bg_params['intercept'])
-        params['b_slope'].set(value=bg_params['slope'])
-        
-        # Set Gaussian parameters
-        peak_pos = x[np.argmax(y)]
-        gauss_params = gaussian_params or {'center': peak_pos, 'sigma': 0.9}
-        params['g_center'].set(value=gauss_params['center'])
-        params['g_amplitude'].set(value=np.sum(y), min=0)
-        params['g_sigma'].set(value=gauss_params['sigma'], min=0.2, max=3)
-        
-        # Perform fit
-        result = self.model.fit(y, params, x=x)
-        
-        # Extract parameters
-        amp = result.params['g_amplitude']
-        sigma = result.params['g_sigma']
-        center = result.params['g_center']
-        fwhm = result.params['g_fwhm']
-        height = result.params['g_height']
-        
+
+        # x and y are your data arrays
+        popt, pcov = curve_fit(linear_gaussian_model, x, y, p0=[0, 0, np.sum(y), x[np.argmax(y)], 0.9])
+        perr = np.sqrt(np.diag(pcov))  # uncertainties for each parameter
+
+        slope = ufloat(popt[0], perr[0])
+        intercept = ufloat(popt[1], perr[1])
+        amp = ufloat(popt[2], perr[2])
+        center = ufloat(popt[3], perr[3])
+        sigma = ufloat(popt[4], perr[4])
+
         # Calculate area with uncertainty
-        area = ufloat(amp.value, amp.stderr) / (x[1] - x[0])
-        
+        area = ufloat(amp.n, amp.s) / (x[1] - x[0])
+
         return {
             "area": area.n,
             "area_err": area.s,
-            "centroid": center.value,
-            "centroid_err": center.stderr,
-            "amplitude": amp.value,
-            "amplitude_err": amp.stderr,
-            "sigma": sigma.value,
-            "sigma_err": sigma.stderr,
-            "fwhm": fwhm.value,
-            "fwhm_err": fwhm.stderr,
-            "height": height.value,
-            "height_err": height.stderr,
-            "fit_params": result.params,
+            "centroid": center.n,
+            "centroid_err": center.s,
+            "amplitude": amp.n,
+            "amplitude_err": amp.s,
+            "sigma": sigma.n,
+            "sigma_err": sigma.s,
             "x": x,
             "y": y,
             "energy_range": energy_range,
-            "fit_result": result
+            "slope": slope.n,
+            "slope_err": slope.s,
+            "intercept": intercept.n,
+            "intercept_err": intercept.s,
         }
     
     def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: Optional[str] = None,) -> PeakFitterResult:
@@ -241,7 +221,7 @@ class PeakFitter:
                 return basename
         files = sorted(files, key=sort_key)
 
-        print(f"peakfit found {len(files)} files to process.")
+        print(f"peakfit - found {len(files)} files to process.")
         
         if not files:
             raise ValueError(f"No files found matching pattern '{file_pattern}' in {folder_path}")
@@ -259,7 +239,7 @@ class PeakFitter:
         return_results = []
         
         # Process files
-        for file in tqdm(files, desc="Processing files"):
+        for file in tqdm(files, desc="peakfit - processing files"):
             try:
                 # Parse file
                 df, calib, start_time, real_time, live_time = parse_spectrum_file(file)
@@ -282,7 +262,6 @@ class PeakFitter:
                     live_time=live_time,
                     amplitude=ufloat(res["amplitude"], res["amplitude_err"]),
                     sigma=ufloat(res["sigma"], res["sigma_err"]),
-                    fwhm=ufloat(res["fwhm"], res["fwhm_err"])
                 ))
                 
                 # Save plots
@@ -308,6 +287,6 @@ class PeakFitter:
         os.makedirs(output_dir, exist_ok=True)
         csv_results.to_csv(os.path.join(output_dir, "peakfit_results.csv"), index=False)
 
-        print(f"peakfit processed {len(results)} files and saved results to {output_dir}/peakfit_results.csv")
+        print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/peakfit_results.csv")
         
         return return_results

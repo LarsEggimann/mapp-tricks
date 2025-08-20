@@ -49,15 +49,15 @@ def plot_matplotlib(res: dict, save_path: Optional[str] = None,
     
     # Plot the background fit
     linear_y = linear_func(res['x'], 
-                          res['fit_params']['b_slope'].value, 
-                          res['fit_params']['b_intercept'].value)
+                          res['slope'], 
+                          res['intercept'])
     plt.plot(res['x'], linear_y, label='Background Fit', color='red')
     
     # Plot the Gaussian fit
     gauss_y = gaussian_func(res['x'],
-                           res['fit_params']['g_amplitude'].value, 
-                           res['fit_params']['g_center'].value,
-                           res['fit_params']['g_sigma'].value)
+                           res['amplitude'], 
+                           res['centroid'],
+                           res['sigma'])
     plt.plot(res['x'], linear_y + gauss_y, label='Total Fit', color='blue')
     
     # Add centroid line
@@ -125,12 +125,12 @@ def plot_plotly(res: dict, df: pd.DataFrame,
 
     # Calculate fit components
     linear_y = linear_func(res['x'], 
-                          res['fit_params']['b_slope'].value, 
-                          res['fit_params']['b_intercept'].value)
+                          res['slope'], 
+                          res['intercept'])
     gauss_y = gaussian_func(res['x'],
-                           res['fit_params']['g_amplitude'].value, 
-                           res['fit_params']['g_center'].value,
-                           res['fit_params']['g_sigma'].value)
+                           res['amplitude'], 
+                           res['centroid'],
+                           res['sigma'])
     
     # Add background fit
     fig.add_trace(go.Scatter(
