@@ -84,9 +84,10 @@ def parse_identity(val):
 # schema: column_name: parser function
 PARSERS: Dict[str, Callable[[str], Any]] = {
     "target": parse_identity,
+    "reaction": parse_identity,
     "notes": parse_identity,
-    "beam_energy_MeV": parse_ufloat,            # parse with uncertainty
-    "peak_energy_range_keV": parse_range,       # convert keV → MeV
+    "beam_energy_MeV": parse_ufloat,
+    "peak_energy_range_keV": parse_range,
     "half_life_s": parse_ufloat,
     "branching_ratio": parse_ufloat,
     "target_material_mass_g": parse_ufloat,
@@ -110,6 +111,7 @@ def parse_csv(filename: str) -> DataFrame:
     Read DataFrame from a standardized CSV file and apply parsing.
     The resulting DataFrame will have typed columns according to the PARSERS mapping.
     - target: str
+    - reaction: str
     - notes: str
     - beam_energy_MeV: ufloat
     - peak_energy_range_keV: tuple[float, float]
