@@ -20,13 +20,13 @@ def do_cross_section_analysis(
     """
 
     df = df.copy()
-    df_row = df.loc[row_condition]
+    df_one_row: pd.DataFrame = df.loc[row_condition]
 
-    if len(df_row) != 1:
+    if len(df_one_row) != 1:
         raise ValueError("Expected a single row DataFrame for cross section analysis. Choose a target, and peak?")
 
-    row_idx = df_row.index[0]   # keep the row index
-    df_row = df_row.squeeze()      # for convenience in code below
+    row_idx = df_one_row.index[0]   # keep the row index
+    df_row = df_one_row.squeeze()      # for convenience in code below
 
     fitter = PeakFitter()
 

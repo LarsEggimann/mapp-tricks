@@ -103,6 +103,16 @@ PARSERS: Dict[str, Callable[[str], Any]] = {
     "output_folder": parse_identity,
 
     # Calculated fields
+    "cross_section_mb": parse_ufloat,
+    "activity_at_end_of_beam_Bq": parse_ufloat,
+    "activity_at_start_of_spectra_Bq": parse_ufloat,
+    "start_of_beam_time": parse_datetime,
+    "end_of_beam_time": parse_datetime,
+    "cooling_time_s": parse_float,
+    "spectra_start_time": parse_datetime,
+    "spectra_end_time": parse_datetime,
+    "spectra_real_time_s": parse_float,
+    "spectra_live_time_s": parse_float
 }
 
 
