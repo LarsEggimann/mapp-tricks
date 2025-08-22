@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 from uncertainties import ufloat # type: ignore
 import pandas as pd # type: ignore
+from .equations import get_cross_section
 from ..peakfit import PeakFitter
 from ..orbitos_utils import analyze_electrometer_data
 from ..spectrometer_calibrations import HPGeCalibration
@@ -60,7 +61,7 @@ def do_cross_section_analysis(
         half_life=df_row.half_life_s,
     )
     
-    cs = calibration.get_cross_section(
+    cs = get_cross_section(
         activity_at_end_of_beam=A_EoB,
         target_mass=df_row.target_material_mass_g,
         molar_mass=df_row.molar_mass,
@@ -74,11 +75,13 @@ def do_cross_section_analysis(
 
 
     # add the results to the DataFrame where the condition applies
-    df.loc[row_idx, "cross_section_mb"] = cs * 1e3
+    df.loc[row_idx, "cross_section_b"] = cs
     df.loc[row_idx, "activity_at_end_of_beam_Bq"] = A_EoB
     df.loc[row_idx, "activity_at_start_of_spectra_Bq"] = A_start_of_spectra
     df.loc[row_idx, "start_of_beam_time"] = electrometer_data.start_of_beam
     df.loc[row_idx, "end_of_beam_time"] = electrometer_data.end_of_beam
+    df.loc[row_idx, "irradiation_time_s"] = electrometer_data.t_irradiation
+    df.loc[row_idx, "integrated_charge_C"] = electrometer_data.integrated_charge
     df.loc[row_idx, "cooling_time_s"] = cooling_time
     df.loc[row_idx, "spectra_start_time"] = spectra_data.start_time
     df.loc[row_idx, "spectra_end_time"] = spectra_data.start_time + timedelta(seconds=spectra_data.real_time)

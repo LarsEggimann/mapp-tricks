@@ -67,13 +67,12 @@ def parse_ufloat(val) -> Optional[ufloat]:
 def parse_datetime(val: str) -> Optional[datetime]:
     return datetime.fromisoformat(val) if val.strip() else None
 
-def parse_range(val: str) -> Optional[tuple[float, float]]:
-    """Example: convert range (130 - 150) to tuple (130, 150)"""
+def parse_tuple(val: str) -> Optional[tuple[float, float]]:
+    """Example: convert range (130, 150) to tuple (130, 150)"""
     if val.strip():
         try:
-            low, high = val.strip()[1:-1].split("-")
-            return (float(low), float(high))
-        except ValueError:
+            return eval(val.strip())
+        except Exception:
             return None
     return None
 
@@ -87,7 +86,7 @@ PARSERS: Dict[str, Callable[[str], Any]] = {
     "reaction": parse_identity,
     "notes": parse_identity,
     "beam_energy_MeV": parse_ufloat,
-    "peak_energy_range_keV": parse_range,
+    "peak_energy_range_keV": parse_tuple,
     "half_life_s": parse_ufloat,
     "branching_ratio": parse_ufloat,
     "target_material_mass_g": parse_ufloat,
@@ -103,16 +102,22 @@ PARSERS: Dict[str, Callable[[str], Any]] = {
     "output_folder": parse_identity,
 
     # Calculated fields
-    "cross_section_mb": parse_ufloat,
+    "cross_section_b": parse_ufloat,
     "activity_at_end_of_beam_Bq": parse_ufloat,
     "activity_at_start_of_spectra_Bq": parse_ufloat,
     "start_of_beam_time": parse_datetime,
     "end_of_beam_time": parse_datetime,
+    "irradiation_time_s": parse_float,
+    "integrated_charge_C": parse_ufloat,
     "cooling_time_s": parse_float,
     "spectra_start_time": parse_datetime,
     "spectra_end_time": parse_datetime,
     "spectra_real_time_s": parse_float,
-    "spectra_live_time_s": parse_float
+    "spectra_live_time_s": parse_float,
+    "interpolated_Mo98_Tc99_cross_section_b": parse_ufloat,
+    "expected_peak_activity_from_98Mo_at_EoB_Bq": parse_ufloat,
+    "corrected_peak_activity_at_EoB_Bq": parse_ufloat,
+    "corrected_100Mo_99Tc_cross_section_barns": parse_ufloat
 }
 
 
