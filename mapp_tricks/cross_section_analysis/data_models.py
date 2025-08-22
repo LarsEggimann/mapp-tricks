@@ -28,6 +28,7 @@ class DataSource:
 
 import pandas as pd
 from pandas import DataFrame, Series
+import uncertainties
 from uncertainties import ufloat_fromstr, ufloat
 from datetime import datetime
 from typing import Optional, Callable, Any, Dict
@@ -157,3 +158,15 @@ def parse_csv(filename: str) -> DataFrame:
         if col in df.columns:
             df[col] = df[col].map(parser)
     return df
+
+def store_csv(df: DataFrame, filename: str) -> None:
+    """
+    Store DataFrame to a standardized CSV file while preserving the precision of the ufloat
+
+    """
+    for index, row in df.iterrows():
+        for col in df.columns:
+            if isinstance(row[col], uncertainties.core.Variable) or isinstance(row[col], uncertainties.UFloat):
+                ufloat_val = row[col]
+                df.at[index, col] = f"{ufloat_val.nominal_value}+/-{ufloat_val.std_dev}"
+    df.to_csv(filename)
