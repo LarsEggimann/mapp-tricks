@@ -29,7 +29,7 @@ def gaussian_func(x: np.ndarray, amp: float, center: float, sigma: float):
 
 
 def plot_matplotlib(res: dict, save_path: Optional[str] = None, 
-                   figsize: Tuple[float, float] = (10, 6)) -> None:
+                   figsize: Tuple[float, float] = (10, 6)) -> plt.Figure:
     """
     Create a matplotlib plot of the peak fit.
     
@@ -42,7 +42,7 @@ def plot_matplotlib(res: dict, save_path: Optional[str] = None,
     figsize : tuple, default (10, 6)
         Figure size (width, height) in inches
     """
-    plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize)
     
     # Plot the spectrum
     plt.plot(res['x'], res['y'], label='Spectrum', color='black', drawstyle='steps-mid')
@@ -85,6 +85,8 @@ def plot_matplotlib(res: dict, save_path: Optional[str] = None,
         plt.close()
     else:
         plt.show()
+    
+    return fig
 
 
 def plot_plotly(res: dict, df: pd.DataFrame, 

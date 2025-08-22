@@ -15,6 +15,7 @@ from lmfit.models import GaussianModel, LinearModel # type: ignore
 from uncertainties import ufloat # type: ignore
 from tqdm import tqdm # type: ignore
 from scipy.optimize import curve_fit # type: ignore
+import matplotlib.pyplot as plt # type: ignore
 
 from .parser import parse_spectrum_file
 
@@ -52,7 +53,7 @@ class PeakFitterResult:
     """
     def __init__(self, area: ufloat, centroid: ufloat,
                  start_time: datetime, real_time: float, live_time: float,
-                 amplitude: ufloat, sigma: ufloat):
+                 amplitude: ufloat, sigma: ufloat, figure: Optional[plt.Figure] = None):
         self.area = area
         self.centroid = centroid
         self.start_time = start_time
@@ -60,6 +61,7 @@ class PeakFitterResult:
         self.live_time = live_time
         self.amplitude = amplitude
         self.sigma = sigma
+        self.figure = figure
 
 
     def __repr__(self):
@@ -254,6 +256,12 @@ class PeakFitter:
 
                 results.append(res)
 
+                
+                # Save plots
+                fig = None
+                if save_plots:
+                    fig = plot_matplotlib(res, save_path=os.path.join(plots_dir, 
+                                                              f"{os.path.basename(file)}.pdf"))
                 return_results.append(PeakFitterResult(
                     area=ufloat(res["area"], res["area_err"]),
                     centroid=ufloat(res["centroid"], res["centroid_err"]),
@@ -262,12 +270,8 @@ class PeakFitter:
                     live_time=live_time,
                     amplitude=ufloat(res["amplitude"], res["amplitude_err"]),
                     sigma=ufloat(res["sigma"], res["sigma_err"]),
+                    figure=fig
                 ))
-                
-                # Save plots
-                if save_plots:
-                    plot_matplotlib(res, save_path=os.path.join(plots_dir, 
-                                                              f"{os.path.basename(file)}.pdf"))
                 
                 if save_plotly:
                     plot_plotly(res, df, save_path=os.path.join(plots_dir, 
