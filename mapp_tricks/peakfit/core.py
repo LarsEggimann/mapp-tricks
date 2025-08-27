@@ -83,13 +83,9 @@ class PeakFitter:
     
     def __init__(self):
         """Initialize the PeakFitter with Gaussian and Linear models."""
-        self.gauss_model = GaussianModel(prefix='g_')
-        self.linear_model = LinearModel(prefix='b_')
-        self.model = self.gauss_model + self.linear_model
+        pass
     
-    def fit_peak(self, df: pd.DataFrame, energy_range: Tuple[float, float], 
-                 background_params: Optional[Dict] = None,
-                 gaussian_params: Optional[Dict] = None) -> Dict:
+    def fit_peak(self, df: pd.DataFrame, energy_range: Tuple[float, float]) -> Dict:
         """
         Fit a Gaussian peak with linear background in the specified energy range.
         
@@ -179,7 +175,7 @@ class PeakFitter:
             file_pattern=file_name
         )
 
-        return res[0] if res else None
+        return res[0]
 
     def process_folder(self, folder_path: str, energy_range: Tuple[float, float],
                       output_dir: Optional[str] = None,
