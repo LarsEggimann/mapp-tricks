@@ -70,7 +70,13 @@ def analyze_electrometer_data(path_to_csv: str):
 
     # Calculate integrated charge using trapezoidal integration
     # Current is in Amperes, time difference gives us Coulombs
-    total_charge = np.trapezoid(df['current'], df['timestamp'])
+    # total_charge = np.trapezoid(df['current'], df['timestamp'])
+    # integrate region within beam time: lowest to highest index
+    if beam_start_time is not None and beam_end_time is not None:
+        beam_mask = (df['datetime'] >= beam_start_time) & (df['datetime'] <= beam_end_time)
+        total_charge = np.trapezoid(df['current'][beam_mask], df['timestamp'][beam_mask])
+    else:
+        total_charge = 0
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
