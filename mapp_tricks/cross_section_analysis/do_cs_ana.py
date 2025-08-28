@@ -1,10 +1,11 @@
 import os
+import numpy as np # type: ignore
 from datetime import datetime, timedelta
 from uncertainties import ufloat # type: ignore
 import pandas as pd # type: ignore
-from .equations import get_cross_section
+from .equations import get_cross_section, get_cross_section_with_integrated_correction_factor
 from ..peakfit import PeakFitter
-from ..orbitos_utils import analyze_electrometer_data
+from ..orbitos_utils import ElectrometerDataAnalyzer, BeamData
 from ..spectrometer_calibrations import HPGeCalibration
 
 class CrossSectionAnalysisResults:
@@ -36,7 +37,9 @@ def do_cross_section_analysis(
         energy_range=df_row.peak_energy_range_keV,
     )
 
-    electrometer_data = analyze_electrometer_data(os.path.join(df_row.data_source_folder, df_row.orbitos_file))
+    ea = ElectrometerDataAnalyzer(os.path.join(df_row.data_source_folder, df_row.orbitos_file))
+    electrometer_data = ea.analyze_beam_data()
+    
 
     cooling_time = (spectra_data.start_time - electrometer_data.end_of_beam).total_seconds()
 
@@ -61,16 +64,30 @@ def do_cross_section_analysis(
         half_life=df_row.half_life_s,
     )
     
-    cs = get_cross_section(
+    # cs = get_cross_section(
+    #     activity_at_end_of_beam=A_EoB,
+    #     target_mass=df_row.target_material_mass_g,
+    #     molar_mass=df_row.molar_mass,
+    #     isotopic_abundance=df_row.isotopic_abundance,
+    #     n_sto=df_row.n_sto,  # stoichiometric coefficient
+    #     t_irradiation=electrometer_data.t_irradiation,
+    #     collimator_area=df_row.collimator_area_cm2,
+    #     half_life=df_row.half_life_s,
+    #     integrated_charge=electrometer_data.integrated_charge # C
+    # )
+
+    integrated_correction_factor = ea.get_integrated_correction_factor(half_life=df_row.half_life_s.n)
+    
+    cs = get_cross_section_with_integrated_correction_factor(
         activity_at_end_of_beam=A_EoB,
         target_mass=df_row.target_material_mass_g,
         molar_mass=df_row.molar_mass,
         isotopic_abundance=df_row.isotopic_abundance,
         n_sto=df_row.n_sto,  # stoichiometric coefficient
-        t_irradiation=electrometer_data.t_irradiation,
         collimator_area=df_row.collimator_area_cm2,
         half_life=df_row.half_life_s,
-        integrated_charge=electrometer_data.integrated_charge # C
+        integrated_charge=electrometer_data.integrated_charge, # C
+        integrated_correction_factor=integrated_correction_factor
     )
 
 

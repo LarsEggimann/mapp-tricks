@@ -1,1 +1,1 @@
-from .analyze_electrometer_data import analyze_electrometer_data, BeamData
+from .analyze_electrometer_data import ElectrometerDataAnalyzer, BeamData

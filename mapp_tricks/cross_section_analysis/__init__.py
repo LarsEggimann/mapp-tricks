@@ -1,3 +1,3 @@
 from .data_models import GammaPeakAndTargetInfo, DataSource, parse_csv, store_csv
 from .do_cs_ana import do_cross_section_analysis
-from .equations import get_activity_at_end_of_beam_with_known_cross_section, get_cross_section
+from .equations import get_activity_at_end_of_beam_with_known_cross_section, get_cross_section, get_cross_section_with_integrated_correction_factor
