@@ -110,6 +110,7 @@ PARSERS: Dict[str, Callable[[str], Any]] = {
     "end_of_beam_time": parse_datetime,
     "irradiation_time_s": parse_float,
     "integrated_charge_C": parse_ufloat,
+    "integrated_correction_factor": parse_float,
     "cooling_time_s": parse_float,
     "spectra_start_time": parse_datetime,
     "spectra_end_time": parse_datetime,

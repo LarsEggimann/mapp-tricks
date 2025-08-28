@@ -3,7 +3,7 @@ import pandas as pd # type: ignore
 import numpy as np # type: ignore
 from scipy.optimize import curve_fit # type: ignore
 from uncertainties import ufloat, unumpy as unp, Variable # type: ignore
-from uncertainties.umath import exp # pylint: disable=no-name-in-module
+from uncertainties.umath import exp # type: ignore # pylint: disable=no-name-in-module
 import matplotlib.pyplot as plt # type: ignore
 from matplotlib.figure import Figure
 
@@ -47,14 +47,14 @@ def get_error_vector(x, cov_beta):
     """
     sigmas = []
     for x_i in x:
-        J = np.zeros((6, 1))
-        J[0, 0] = 1 / x_i               # derivative with respect to a_0
-        J[1, 0] = np.log(x_i) / x_i       # derivative with respect to a_1
-        J[2, 0] = (np.log(x_i)**2) / x_i  # derivative with respect to a_2
-        J[3, 0] = (np.log(x_i)**3) / x_i  # derivative with respect to a_3
-        J[4, 0] = (np.log(x_i)**4) / x_i  # derivative with respect to a_4
-        J[5, 0] = (np.log(x_i)**5) / x_i  # derivative with respect to a_5
-        sigma = np.sqrt(np.diag(J.T @ cov_beta @ J))
+        A = np.zeros((6, 1))
+        A[0, 0] = 1 / x_i                 # derivative with respect to a_0
+        A[1, 0] = np.log(x_i) / x_i       # derivative with respect to a_1
+        A[2, 0] = (np.log(x_i)**2) / x_i  # derivative with respect to a_2
+        A[3, 0] = (np.log(x_i)**3) / x_i  # derivative with respect to a_3
+        A[4, 0] = (np.log(x_i)**4) / x_i  # derivative with respect to a_4
+        A[5, 0] = (np.log(x_i)**5) / x_i  # derivative with respect to a_5
+        sigma = np.sqrt(np.diag(A.T @ cov_beta @ A))
         sigmas.append(sigma[0])  # take the first element since J is 6x1
     return np.array(sigmas)
 

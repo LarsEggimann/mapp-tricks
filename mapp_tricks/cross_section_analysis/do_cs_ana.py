@@ -77,7 +77,7 @@ def do_cross_section_analysis(
     # )
 
     integrated_correction_factor = ea.get_integrated_correction_factor(half_life=df_row.half_life_s.n)
-    
+
     cs = get_cross_section_with_integrated_correction_factor(
         activity_at_end_of_beam=A_EoB,
         target_mass=df_row.target_material_mass_g,
@@ -99,6 +99,7 @@ def do_cross_section_analysis(
     df.loc[row_idx, "end_of_beam_time"] = electrometer_data.end_of_beam
     df.loc[row_idx, "irradiation_time_s"] = electrometer_data.t_irradiation
     df.loc[row_idx, "integrated_charge_C"] = electrometer_data.integrated_charge
+    df.loc[row_idx, "integrated_correction_factor"] = integrated_correction_factor
     df.loc[row_idx, "cooling_time_s"] = cooling_time
     df.loc[row_idx, "spectra_start_time"] = spectra_data.start_time
     df.loc[row_idx, "spectra_end_time"] = spectra_data.start_time + timedelta(seconds=spectra_data.real_time)
