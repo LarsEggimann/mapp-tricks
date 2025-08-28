@@ -155,7 +155,7 @@ class HPGeCalibration:
         plt.xlabel('Energy [keV]')
         plt.ylabel('Efficiency')
         plt.legend()
-        plt.title('HPGe Detector Efficiency Fit')
+        plt.title(f'HPGe Detector Efficiency Fit, level {self.level}, with aluminum foil: {self.with_aluminum_foil}')
         plt.grid(True)
         plt.savefig(f'HPGe_calibration_fit_{name}.pdf', bbox_inches='tight')
         return figure
