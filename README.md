@@ -56,3 +56,74 @@ You can also show the fit to visually verify the calibration:
 ```python
 calibration.plot_fit()
 ```
+
+
+## Usage Orbitos Utils
+ORBITOS is a custom software developed to control and acquire data from various beam shaping and monitoring devices.
+
+### ElectrometerDataAnalyzer
+The `orbitos_utils` module provides a convenient tool to plot and analyze data from the electrometer in its most simple use case. For more advanced analysis one can still use the util to easily extract the raw data and perform custom analysis.
+
+```python
+from mapp_tricks.orbitos_utils import ElectrometerDataAnalyzer
+
+eda = ElectrometerDataAnalyzer(path_to_csv="data/electrometer_data.csv")
+electrometer_data = eda.analyze_beam_data()
+```
+
+The `electrometer_data` is a python object that contains the following attributes:
+```python
+class BeamData:
+    start_of_beam: datetime
+    end_of_beam: datetime
+    t_irradiation: float
+    integrated_charge: ufloat
+    plot: go.Figure
+```
+
+i.e. to get the integrated charge (which is a ufloat):
+```python
+integrated_charge = electrometer_data.integrated_charge
+print(f"Integrated charge: {integrated_charge:.3f} C")
+```
+
+To get only the raw data:
+```python
+eda = ElectrometerDataAnalyzer(path_to_csv="data/electrometer_data.csv")
+
+raw_data = eda.df
+```
+The raw data is a pandas dataframe which looks like this
+```
+      timestamp       current                   datetime
+0  1.756286e+09  1.500000e-12 2025-08-27 11:05:49.924095
+1  1.756286e+09 -1.000000e-12 2025-08-27 11:05:50.227460
+2  1.756286e+09 -5.000000e-13 2025-08-27 11:05:50.530236
+3  1.756286e+09 -8.000000e-13 2025-08-27 11:05:50.834038
+4  1.756286e+09 -5.000000e-13 2025-08-27 11:05:51.140312
+...
+```
+
+#### Integrated Correction Factor
+It also calculates the integrated correction factor accounting for the decay of a isotope produced during irradiation. It accounts for irregular beam-shape and accurately integrates the needed correction factor to effectively determine i.e. the cross section of a reaction. It is implemented according to the following equation:
+$$
+f(t) = \frac{\int_0^t P(t')\,dt'}{e^{-\lambda t}\int_0^t e^{\lambda t'} P(t')\,dt'}
+$$
+, where $P(t)$ is the production rate (which is proportional to the beam current for all times $t'$) and $\lambda$ is the decay constant of the isotope. For constant $P(t) = P$ this yields:
+$$
+f(t) = \frac{\lambda t}{1 - e^{-\lambda t}}
+$$
+, which is the well known correction factor we use for i.e. the cross section calculation.
+
+To get the integrated correction factor one can use the following example for a Tc101 peak:
+
+```python
+eda = ElectrometerDataAnalyzer(path_to_csv="data/messy_beam_electrometer_data.csv")
+
+electrometer_data = eda.analyze_beam_data()
+integrated_correction_factor = eda.get_integrated_correction_factor(
+    half_life=14.12 * 60
+)
+
+print(f"Integrated correction factor: {integrated_correction_factor:.3f}")
+```

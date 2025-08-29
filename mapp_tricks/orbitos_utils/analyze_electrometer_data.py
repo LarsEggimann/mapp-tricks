@@ -31,24 +31,19 @@ class ElectrometerDataAnalyzer:
     def __init__(self, path_to_csv: str, beam_threshold: float = 400e-12):
         self.path_to_csv = path_to_csv
         self.beam_threshold = beam_threshold
-        self.df = None
         self.plot = None
         self.beam_data: BeamData | None = None
-
-    def analyze_beam_data(self):
-        # check the file exists
         if not os.path.exists(self.path_to_csv):
             raise FileNotFoundError(f"File not found: {self.path_to_csv}")
-        else:
-            print(f"orbitos-util - processing electrometer data: {self.path_to_csv}")
-
-        # Read the CSV file
         self.df = pd.read_csv(self.path_to_csv)
-
-        # Convert timestamps to datetime
+        if self.df is None or self.df.empty:
+            raise ValueError(f"Failed to read data from {self.path_to_csv} or file is empty.")
+        # convert timestamps to datetime
         self.df['datetime'] = [datetime.fromtimestamp(ts) for ts in self.df['timestamp']]
 
-        # Find beam start and end times (current above threshold)
+    def analyze_beam_data(self, save_plot=True) -> BeamData:
+
+        # find beam start and end times (current above threshold)
         beam_mask = self.df['current'] > self.beam_threshold
         beam_indices = self.df.index[beam_mask]
         if len(beam_indices) > 0:
@@ -61,14 +56,14 @@ class ElectrometerDataAnalyzer:
             self.beam_start_time = None
             self.beam_end_time = None
 
-        # Calculate integrated charge using trapezoidal integration
+        # calc integrated charge using trapezoidal integration
         if self.beam_start_time is not None and self.beam_end_time is not None:
             beam_mask = (self.df['datetime'] >= self.beam_start_time) & (self.df['datetime'] <= self.beam_end_time)
             total_charge = np.trapezoid(self.df['current'][beam_mask], self.df['timestamp'][beam_mask])
         else:
             total_charge = 0
 
-        self.integrated_charge = ufloat(total_charge, np.std(self.df['current']))
+        self.integrated_charge = ufloat(total_charge, np.std(self.df['current'][beam_mask]))
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -144,7 +139,9 @@ class ElectrometerDataAnalyzer:
         os.makedirs(results_path, exist_ok=True)
         file_name = os.path.basename(self.path_to_csv)
         file_name = os.path.splitext(file_name)[0]
-        fig.write_html(os.path.join(results_path, f'{file_name}_plot.html'))
+
+        if save_plot:
+            fig.write_html(os.path.join(results_path, f'{file_name}_plot.html'))
 
         return self.beam_data
 
@@ -152,6 +149,11 @@ class ElectrometerDataAnalyzer:
         """
         If half life of peak of interest is comparable to irradiation time, the fluctuations in the current can become relevant.
         This function returns the integrated correction factor to properly account for production and decay during irradiation, based on the beam data.
+
+        - half_life: The half-life of the isotope of interest (in seconds).
+        - start_of_beam: The start time of the beam (optional).
+        - end_of_beam: The end time of the beam (optional).
+        - show_plot: Whether to show a plot of the correction factor over time (optional).
 
         The Math:
         f(t) = \frac{\int_0^t P(t')\,dt'}{e^{-\lambda t}\int_0^t e^{\lambda t'} P(t')\,dt'}
@@ -177,7 +179,7 @@ class ElectrometerDataAnalyzer:
         # start time at 0
         time -= time[0]
 
-        # Compute the integrated correction factor
+        # compute the integrated correction factor
         def compute(t, c):
             if len(t) < 2:
                 return 1, 0, 0
@@ -187,8 +189,6 @@ class ElectrometerDataAnalyzer:
 
         # if true do it for each time step and plot it
         if show_plot:
-            import plotly.express as px
-            import plotly.graph_objects as go
 
             production_at_t = []
             decay_at_t = []
@@ -222,8 +222,5 @@ class ElectrometerDataAnalyzer:
             )
             fig.show()
 
-        print(f"time last: {time[-1]}")
-        print(f"t_irradiation: {self.beam_data.t_irradiation}")
-        print(f"irradiation time: {self.beam_data.t_irradiation}")
         res,_,_ = compute(time, current)
         return res
