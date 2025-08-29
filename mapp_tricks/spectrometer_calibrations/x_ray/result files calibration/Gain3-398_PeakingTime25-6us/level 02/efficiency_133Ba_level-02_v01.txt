@@ -1,0 +1,14 @@
+Used file for the fit: SDD_normalized-Efficiency_point-source_with-air_all-levels.csv
+
+parameters
+offset a	slope b
+-3.41922e-05	0.00191726
+
+Covariance matrix
+1.25425e-11	-5.27142e-10
+-5.27142e-10	2.25415e-08
+
+used data points for fitting
+energy [keV]	efficiency	efficiency error	nuclide
+53.16	4.24543e-05	2.53385e-06	Ba133
+81	9.54115e-06	4.71723e-07	Ba133

@@ -1,5 +1,5 @@
 # mapp-tricks package
-Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern.
+Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern. It has several modules, some of which are explained below. The other modules I figured are too specific and probably not useful for others, but feel free to explore them.
 
 
 Use at your own risk!
@@ -56,6 +56,10 @@ You can also show the fit to visually verify the calibration:
 ```python
 calibration.plot_fit()
 ```
+
+## Usage of X-ray Spectrometer Efficiency Calibration
+This module was developed by Samuel Dominique Juillerat.
+
 
 
 ## Usage Orbitos Utils
