@@ -240,7 +240,7 @@ class PeakFitter:
         for file in tqdm(files, desc="peakfit - processing files"):
             try:
                 # Parse file
-                df, calib, start_time, real_time, live_time = parse_spectrum_file(file)
+                df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file)
 
                 # Fit peak
                 res = self.fit_peak(df, energy_range)

@@ -5,6 +5,8 @@ This module provides functions to parse spectrum files and extract
 energy calibration parameters and data.
 """
 
+import os
+import glob
 from datetime import datetime
 import pandas as pd
 
@@ -56,7 +58,14 @@ def parse_spectrum_file(filepath):
         if line.startswith("# Live time (s):") or line.startswith("LiveTime: "):
             live_time = float(line.split(":")[1].split()[0].strip())
             break
-    
+
+    # Extract total gamma count
+    total_gamma_count = None
+    for line in lines:
+        if line.startswith("# Total counts:") or line.startswith("TotalGammaCounts: "):
+            total_gamma_count = float(line.split(":")[1].split()[0].strip())
+            break
+
     # Find format of data if first line is "#" then we have converted from cnf
     if lines[0].startswith("#"):
         for i, line in enumerate(lines):
@@ -75,4 +84,141 @@ def parse_spectrum_file(filepath):
         df = pd.read_csv(filepath, sep=' ', skiprows=data_start, 
                      names=["channel", "energy", "counts"])
 
-    return df, (0, 0, 0, 0), start_time, real_time, live_time
+    return df, (0, 0, 0, 0), start_time, real_time, live_time, total_gamma_count
+
+def sum_spectras(paths_to_txt: list[str], result_file_path_name: str):
+    """
+    Sum the spectra from multiple text files.
+
+    Parameters
+    ----------
+    paths_to_txt : list[str]
+        List of paths to the text files
+
+    Returns
+    -------
+    DataFrame
+        DataFrame containing the summed spectra
+    """
+
+    summed_df = pd.DataFrame()
+    start_times = []
+    live_times = []
+    real_times = []
+    total_gamma_counts = []
+
+    for path in paths_to_txt:
+
+        df, _, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(path)
+
+        # # check the first df entry, if it starts with channel 0, delete it
+        # if not df.empty and df.iloc[0]['channel'] == 0:
+        #     df = df.iloc[1:]
+
+
+        start_times.append(start_time)
+        real_times.append(real_time)
+        live_times.append(live_time)
+        total_gamma_counts.append(total_gamma_count)
+
+        # sum "energy" of spectra
+        if summed_df.empty:
+            summed_df = df
+        else:
+            summed_df['counts'] = summed_df['counts'] + df['counts']
+
+    # find earliest start_time
+    earliest_start_time = min(start_times)
+
+    # sum live and real times
+    summed_live_time = sum(live_times)
+    summed_real_time = sum(real_times)
+    summed_total_gamma_count = sum(total_gamma_counts)
+
+    # text file example exported from InterSpect
+
+    # Original File Name: /tmp/summed_0f8f-53d9-4ab3-49ad
+    # TotalGammaLiveTime: 355880 seconds
+    # TotalRealTime: 356400 seconds
+    # TotalGammaCounts: 4.05058e+06 seconds
+    # TotalNeutron: 0 seconds
+    # Remark: N42 file created by: InterSpec
+    # Remark: MCA Type: Lynx
+
+
+    # StartTime: 2025-08-27T14:28:04.021681
+    # LiveTime: 355880 seconds
+    # RealTime: 356400 seconds
+    # SampleNumber: 1
+    # DetectorName: My ADC
+    # Title: Combination-20250901 09:07:25
+    # EquationType: Polynomial
+    # Coefficients: -0.126274 0.243864
+    # Channel Energy Counts
+    # 0 -0.126274 0
+    # 1 0.11759 0
+    # 2 0.361455 0
+
+    # create folder if not exists
+    os.makedirs(os.path.dirname(result_file_path_name), exist_ok=True)
+
+    with open(result_file_path_name, 'w') as f:
+        f.write(f"Original File Name: {path}\n")
+        f.write(f"TotalGammaLiveTime: {summed_live_time} seconds\n")
+        f.write(f"TotalRealTime: {summed_real_time} seconds\n")
+        f.write(f"TotalGammaCounts: {int(summed_total_gamma_count)} seconds\n")
+        f.write(f"TotalNeutron: 0 seconds\n")
+        f.write(f"Remark: N42 file created by: Custom Python Script made by Lars Eggimann\n")
+        f.write(f"Remark: MCA Type: Lynx\n")
+        f.write(f"\n")
+        f.write(f"StartTime: {earliest_start_time}\n")
+        f.write(f"LiveTime: {summed_live_time} seconds\n")
+        f.write(f"RealTime: {summed_real_time} seconds\n")
+        f.write(f"SampleNumber: 1\n")
+        f.write(f"DetectorName: My ADC\n")
+        f.write(f"Title: Summation-{datetime.now()}\n")
+        f.write(f"EquationType: Polynomial\n")
+        f.write(f"Coefficients: -0.126274 0.243864\n")
+        f.write(f"Channel Energy Counts\n")
+        for index, row in summed_df.iterrows():
+            f.write(f"{row['channel']} {row['energy']} {row['counts']}\n")
+
+    print(f"Summed spectra saved to {result_file_path_name}")
+
+    return summed_df, earliest_start_time, summed_real_time, summed_live_time
+
+def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, result_file_name: str):
+    """
+    Sum the spectra from multiple text files in a folder matching a specific pattern.
+
+    Parameters
+    ----------
+    folder_path : str
+        Path to the folder containing the text files
+    pattern : str
+        Pattern to match the text files. Can be a single pattern or a list of patterns.
+        For multiple patterns, separate with '|' (e.g., '*009.txt|*010.txt')
+    result_file_name : str
+        Name of the result file to save the summed spectra
+
+    Returns
+    -------
+    DataFrame
+        DataFrame containing the summed spectra
+    """
+    
+    # Handle multiple patterns separated by '|'
+    if '|' in pattern:
+        patterns = pattern.split('|')
+        paths_to_txt = []
+        for p in patterns:
+            paths_to_txt.extend(glob.glob(os.path.join(folder_path, p.strip())))
+        # Remove duplicates and sort
+        paths_to_txt = sorted(list(set(paths_to_txt)))
+    else:
+        paths_to_txt = glob.glob(os.path.join(folder_path, pattern))
+    
+    print(f"Found {len(paths_to_txt)} files matching pattern '{pattern}' in folder '{folder_path}'")
+    print(f"Files: {paths_to_txt}")
+    result_file_path = os.path.join(folder_path, result_file_name)
+    return sum_spectras(paths_to_txt, result_file_path)
