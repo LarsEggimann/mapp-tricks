@@ -10,7 +10,7 @@ Developed by Samuel Dominique Juillerat, modified by Lars Eggimann.
 
 -   Modification of the `.csv` peak information files with the `.mca` spectrum files for the calibration in [modification-files_Xray-spectrometer.py](./code/modification-files_Xray-spectrometer.py)
 -   Calibration with the modified files in [calibration_Xray-spectrometer.py](./code/calibration_Xray-spectrometer.py)
--   Querying the efficiency for a certain energy in [efficiency_Xray-spectrometer.py](./code/efficiency_Xray-spectrometer.py)
+-   Querying the efficiency for a certain energy in [efficiency_xray_spectrometer.py](./code/efficiency_xray_spectrometer.py)
 
 ## 📂 Project Structure
 
@@ -19,7 +19,7 @@ Developed by Samuel Dominique Juillerat, modified by Lars Eggimann.
 ├─ code/                                                        # folder with all scripts
 │     ├─ modification-files_Xray-spectrometer.py                # script for modification
 │     ├─ calibration_Xray-spectrometer.py                       # script for calibration
-│     ├─ efficiency_Xray-spectrometer.py                        # script for efficiency query
+│     ├─ efficiency_xray_spectrometer.py                        # script for efficiency query
 │     └─ utils/                                                 # folder with helper functions
 │           ├─ functions_geometrical_factor.py
 │           └─ functions_normalized_efficiency_detector.py
@@ -110,7 +110,7 @@ The following steps are necessary in order to perform a new calibration.
 
 ## 🖥️ Queries
 
-Open the python script [efficiency_Xray-spectrometer.py](./code/efficiency_Xray-spectrometer.py) and choose the parameters according to your efficiency query and let it run. Also this script will take some time due to complex calculations in the background. The code will scale the efficiency according to the stated radius.
+Open the python script [efficiency_xray_spectrometer.py](./code/efficiency_xray_spectrometer.py) and choose the parameters according to your efficiency query and let it run. Also this script will take some time due to complex calculations in the background. The code will scale the efficiency according to the stated radius.
 
 In the end you will receive a terminal output and a plot.
 

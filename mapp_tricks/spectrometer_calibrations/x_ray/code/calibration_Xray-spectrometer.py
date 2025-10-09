@@ -364,6 +364,7 @@ def _pack_ufloat_array(value_row, error_row):
     return array_ufloat
 
 def _calculate_attenuation_plastic(E0, d0):
+    
     path0 = '../files/attenuation/'
     filename0 = 'attenuation-coefficient-polyethylene.txt'
     data0 = np.loadtxt(path0 + filename0, skiprows=1)[:,:2]

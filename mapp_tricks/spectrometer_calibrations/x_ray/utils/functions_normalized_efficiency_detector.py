@@ -9,14 +9,20 @@ Description:    This script contains the main functions for the computation of
                 energy. Also the attenuation of the air is included.
 """
 
+import os
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.integrate import quad
 from scipy.integrate import dblquad
 
+def get_file_directory():
+    current_file = os.path.abspath(__file__)
+    return os.path.dirname(current_file)
+
 # %% basic functions
 def _load_NIST_data_and_return_file():
-    path = '../files/attenuation/'
+    dir_path = get_file_directory()
+    path = os.path.join(dir_path, '../files/attenuation/')
     filename_Be = 'attenuation-coefficient-Be_NIST.txt'
     filename_Si = 'attenuation-coefficient-Si_NIST.txt'
     
@@ -46,7 +52,8 @@ def _barometric_formula(rho0, h):
     return rho0*np.exp(-rho0*g/p0*h)*1E-3      # return density of the air [g/cm^3]
 
 def _load_air_data_and_return_file():
-    path = '../files/attenuation/'
+    cwd = get_file_directory()
+    path = os.path.join(cwd, '../files/attenuation/')
     filename = 'attenuation-coefficient-air.txt'
     
     h_bern = 537         # height [m] above sea level

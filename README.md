@@ -58,7 +58,9 @@ calibration.plot_fit()
 ```
 
 ## Usage of X-ray Spectrometer Efficiency Calibration
-This module was developed by Samuel Dominique Juillerat.
+The calibration code for the x-ray spectrometer was developed by Samuel Dominique Juillerat.
+
+...
 
 
 
