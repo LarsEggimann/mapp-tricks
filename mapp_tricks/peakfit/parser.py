@@ -7,6 +7,7 @@ energy calibration parameters and data.
 
 import os
 import glob
+import re
 from datetime import datetime
 import pandas as pd
 
@@ -207,13 +208,13 @@ def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, resu
         DataFrame containing the summed spectra
     """
     
-    # Handle multiple patterns separated by '|'
+    # handle multiple patterns separated by '|'
     if '|' in pattern:
         patterns = pattern.split('|')
         paths_to_txt = []
         for p in patterns:
             paths_to_txt.extend(glob.glob(os.path.join(folder_path, p.strip())))
-        # Remove duplicates and sort
+        # remove duplicates and sort
         paths_to_txt = sorted(list(set(paths_to_txt)))
     else:
         paths_to_txt = glob.glob(os.path.join(folder_path, pattern))
@@ -222,3 +223,55 @@ def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, resu
     print(f"Files: {paths_to_txt}")
     result_file_path = os.path.join(folder_path, result_file_name)
     return sum_spectras(paths_to_txt, result_file_path)
+
+
+
+def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "sum"):
+    """
+    Groups spectra files in a folder and sums them up in numeric order.
+
+    Args:
+        folder_path (str): Path to the folder containing spectra files.
+        group_size (int): Number of spectra to sum in one group. Default = 4.
+        prefix (str): Subfolder prefix for result files. Default = "sum".
+    """
+    # find all spectra files (*.txt)
+    files = glob.glob(os.path.join(folder_path, "*.txt"))
+
+    if not files:
+        print(f"No spectra files found in {folder_path}")
+        return
+
+    # extract numeric part and sort numerically
+    def extract_num(fname):
+        match = re.search(r"(\d+)", os.path.basename(fname))
+        return int(match.group(1)) if match else float("inf")
+
+    files = sorted(files, key=extract_num)
+
+    # results folder
+    result_dir = os.path.join(folder_path, prefix)
+    os.makedirs(result_dir, exist_ok=True)
+
+    # loop through files in groups
+    for i in range(0, len(files), group_size):
+        group = files[i:i + group_size]
+        if not group:
+            continue
+
+        # build pattern (OR-separated filenames)
+        pattern = "|".join(os.path.basename(f) for f in group)
+
+        # get start/end numbers
+        start_num = extract_num(group[0])
+        end_num = extract_num(group[-1])
+
+        result_file_name = os.path.join(result_dir, f"summed_{start_num}-{end_num}.txt")
+
+        sum_spectras_matching_pattern_in_folder(
+            folder_path=folder_path,
+            pattern=pattern,
+            result_file_name=result_file_name
+        )
+
+        print(f"Summed {len(group)} spectra → {result_file_name}")

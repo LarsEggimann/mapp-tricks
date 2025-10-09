@@ -15,8 +15,8 @@ class BeamData:
 
     def __init__(self, start_of_beam: datetime, end_of_beam: datetime, integrated_charge: ufloat, 
                  plot: go.Figure):
-        self.start_of_beam = start_of_beam
-        self.end_of_beam = end_of_beam
+        self.start_of_beam: datetime = start_of_beam
+        self.end_of_beam: datetime = end_of_beam
         self.t_irradiation = (end_of_beam - start_of_beam).total_seconds()
         self.integrated_charge = integrated_charge
         self.plot = plot
@@ -45,6 +45,10 @@ class ElectrometerDataAnalyzer:
 
         # find beam start and end times (current above threshold)
         beam_mask = self.df['current'] > self.beam_threshold
+
+        # set all values to 0 for which there is no beam
+        self.df.loc[~beam_mask, 'current'] = 0
+
         beam_indices = self.df.index[beam_mask]
         if len(beam_indices) > 0:
             beam_start_idx = beam_indices[0]
@@ -144,6 +148,8 @@ class ElectrometerDataAnalyzer:
             fig.write_html(os.path.join(results_path, f'{file_name}_plot.html'))
 
         return self.beam_data
+    
+    # def get_correction_factor():
 
     def get_integrated_correction_factor(self, half_life, start_of_beam: datetime | None = None, end_of_beam: datetime | None = None, show_plot = False):
         """
