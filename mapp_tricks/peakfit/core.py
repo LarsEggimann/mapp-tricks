@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Union
 import numpy as np
 import pandas as pd # type: ignore
-from lmfit.models import GaussianModel, LinearModel # type: ignore
 from uncertainties import ufloat # type: ignore
 from tqdm import tqdm # type: ignore
 from scipy.optimize import curve_fit # type: ignore

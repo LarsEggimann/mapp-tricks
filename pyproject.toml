@@ -18,5 +18,6 @@ dependencies = [
     "scipy",
     "uncertainties",
     "matplotlib",
-    "plotly"
+    "plotly",
+    "tqdm",
 ]
