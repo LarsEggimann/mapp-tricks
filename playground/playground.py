@@ -1,2 +1,2 @@
-from mapp_tricks.film_reader import *
+from mapp_tricks.film_analyzer import *
 

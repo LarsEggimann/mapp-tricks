@@ -1,0 +1,36 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "film-analyzer-generate-config",
+			"type": "shell",
+			"command": "/home/lars/Nextcloud/Uni/phd/projects/mapp-tricks/.venv/bin/python",
+			"args": [
+				"-m",
+				"mapp_tricks.film_analyzer.film_analyzer",
+				"playground/data/film_reader_test_data",
+				"--make-default-config"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "film-analyzer-process",
+			"type": "shell",
+			"command": "/home/lars/Nextcloud/Uni/phd/projects/mapp-tricks/.venv/bin/python",
+			"args": [
+				"-m",
+				"mapp_tricks.film_analyzer.film_analyzer",
+				"playground/data/film_reader_test_data",
+				"--config",
+				"playground/data/film_reader_test_data/film_config.json"
+			],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		}
+	]
+}
