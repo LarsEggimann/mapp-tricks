@@ -12,6 +12,7 @@ from skimage import io  # type: ignore[import-not-found]
 import plotly.graph_objects as go  # type: ignore[import-not-found]
 from plotly.subplots import make_subplots  # type: ignore[import-not-found]
 from uncertainties import ufloat  # type: ignore[import-not-found]
+import uncertainties.unumpy as unp  # type: ignore[import-not-found]
 
 
 Shape = Literal["circular", "rectangular"]
@@ -57,11 +58,26 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
     Returns a float64 array in the same dynamic range as the input dtype.
     """
     if image.ndim == 2:
-        return image.astype(np.float64)
-    # Use first 3 channels
-    rgb = image[..., :3].astype(np.float64)
-    weights = np.array([0.2989, 0.5870, 0.1140], dtype=np.float64)
-    return np.tensordot(rgb, weights, axes=([-1], [0]))
+        g = image.astype(np.float64)
+    else:
+        # Use first 3 channels
+        rgb = image[..., :3].astype(np.float64)
+        weights = np.array([0.2989, 0.5870, 0.1140], dtype=np.float64)
+        g = np.tensordot(rgb, weights, axes=([-1], [0]))
+
+    # Map to 8-bit-like range [0, 255] to match calibration pixel values
+    # Common cases: uint16 TIFFs. If max > 255, scale down accordingly.
+    gmax = float(np.nanmax(g)) if np.size(g) > 0 else 0.0
+    if gmax <= 0:
+        return g
+    if g.dtype == np.uint16 or gmax > 255:
+        # If original was 16-bit, approximate to 8-bit by dividing by 257
+        g = g / 257.0
+    elif g.dtype.kind == 'f' and gmax <= 1.0:
+        g = g * 255.0
+    # Clip to [0,255]
+    g = np.clip(g, 0.0, 255.0)
+    return g
 
 
 def _sorted_tif_files(folder: Path) -> List[Path]:
@@ -264,57 +280,48 @@ class FilmAnalyzer:
         beta = ufloat(pars["beta"]["value"], pars["beta"].get("error", 0.0))
 
         dose_nominal = self._inv_green_saunders(g, Do.n, PVmin.n, PVmax.n, beta.n)
-        # Limit by max_dose
-        dose_nominal = np.where(dose_nominal > max_dose, 0.0, dose_nominal)
+        # Limit by max_dose (clamp rather than zeroing to preserve signal)
+        dose_nominal = np.minimum(dose_nominal, float(max_dose))
         return dose_nominal
 
     def _roi_mean_with_calib_uncertainty(self, gray: np.ndarray, mask: np.ndarray, max_dose: float) -> ufloat:
-        # Nominal mean
-        dose_nominal = self._dose_map_from_calibration(gray, max_dose)
-        roi_nominal = np.where(mask, dose_nominal, np.nan)
-        vals = roi_nominal[~np.isnan(roi_nominal)]
-        if vals.size == 0:
+        # Use ufloats to propagate calibration parameter uncertainties automatically
+        roi_indices = np.where(mask)
+        if roi_indices[0].size == 0:
             return ufloat(0.0, 0.0)
-        mean_nom = float(np.mean(vals))
 
+        # If ROI is very large, subsample to keep it manageable
+        max_samples = 100_000
+        if roi_indices[0].size > max_samples:
+            # stride in both dims to roughly keep under max_samples
+            stride = int(np.ceil(np.sqrt(roi_indices[0].size / max_samples)))
+            sampled_mask = np.zeros_like(mask, dtype=bool)
+            sampled_mask[::stride, ::stride] = mask[::stride, ::stride]
+            roi_indices = np.where(sampled_mask)
+
+        pv = gray.astype(np.float64)[roi_indices]
         pars = self.calibration["pars"]
-        Do_v, Do_s = float(pars["Do"]["value"]), float(pars["Do"].get("error", 0.0))
-        PVmin_v, PVmin_s = float(pars["PVmin"]["value"]), float(pars["PVmin"].get("error", 0.0))
-        PVmax_v, PVmax_s = float(pars["PVmax"]["value"]), float(pars["PVmax"].get("error", 0.0))
-        beta_v, beta_s = float(pars["beta"]["value"]), float(pars["beta"].get("error", 0.0))
+        Do = ufloat(pars["Do"]["value"], pars["Do"].get("error", 0.0))
+        PVmin = ufloat(pars["PVmin"]["value"], pars["PVmin"].get("error", 0.0))
+        PVmax = ufloat(pars["PVmax"]["value"], pars["PVmax"].get("error", 0.0))
+        beta = ufloat(pars["beta"]["value"], pars["beta"].get("error", 0.0))
 
-        def mean_for(Do, PVmin, PVmax, beta):
-            d = self._inv_green_saunders(gray.astype(np.float64), Do, PVmin, PVmax, beta)
-            d = np.where(d > max_dose, 0.0, d)
-            rv = np.where(mask, d, np.nan)
-            rv = rv[~np.isnan(rv)]
-            return 0.0 if rv.size == 0 else float(np.mean(rv))
+        # Compute dose as UFloat array
+        # Clip pv into (PVmin, PVmax) using nominal values for stability in the ratio
+        pv_clip = np.clip(pv, PVmin.n + 1e-9, PVmax.n - 1e-9)
+        ratio = (pv_clip - PVmin) / (PVmax - pv_clip)
+        dose_u = Do * ratio ** (1.0 / beta)
 
-        # Central differences derivatives where sigma>0
-        terms = []
-        if Do_s > 0:
-            dplus = mean_for(Do_v + Do_s, PVmin_v, PVmax_v, beta_v)
-            dminus = mean_for(Do_v - Do_s, PVmin_v, PVmax_v, beta_v)
-            dmdDo = (dplus - dminus) / (2.0 * Do_s)
-            terms.append((dmdDo * Do_s) ** 2)
-        if PVmin_s > 0:
-            dplus = mean_for(Do_v, PVmin_v + PVmin_s, PVmax_v, beta_v)
-            dminus = mean_for(Do_v, PVmin_v - PVmin_s, PVmax_v, beta_v)
-            dmdPVmin = (dplus - dminus) / (2.0 * PVmin_s)
-            terms.append((dmdPVmin * PVmin_s) ** 2)
-        if PVmax_s > 0:
-            dplus = mean_for(Do_v, PVmin_v, PVmax_v + PVmax_s, beta_v)
-            dminus = mean_for(Do_v, PVmin_v, PVmax_v - PVmax_s, beta_v)
-            dmdPVmax = (dplus - dminus) / (2.0 * PVmax_s)
-            terms.append((dmdPVmax * PVmax_s) ** 2)
-        if beta_s > 0:
-            dplus = mean_for(Do_v, PVmin_v, PVmax_v, beta_v + beta_s)
-            dminus = mean_for(Do_v, PVmin_v, PVmax_v, beta_v - beta_s)
-            dmdbeta = (dplus - dminus) / (2.0 * beta_s)
-            terms.append((dmdbeta * beta_s) ** 2)
+        # Apply max_dose cutoff using nominal values (clamp to max_dose)
+        dose_nom = unp.nominal_values(dose_u)
+        above = dose_nom > max_dose
+        if np.any(above):
+            dose_u = dose_u.copy()
+            dose_u[above] = ufloat(float(max_dose), 0.0)
 
-        sigma = float(np.sqrt(np.sum(terms))) if terms else 0.0
-        return ufloat(mean_nom, sigma)
+        # Mean with proper uncertainty propagation
+        mean_u = np.sum(dose_u) / len(dose_u)
+        return mean_u
 
     def _make_plot(self, image_rgb_like: np.ndarray, dose_map: np.ndarray, mask: np.ndarray, cfg: FileROIConfig, mean_dose: ufloat) -> go.Figure:
         # Downsample for plotting to reduce HTML size
@@ -335,6 +342,21 @@ class FilmAnalyzer:
             img_vis = image_rgb_like
 
         img_vis_ds = _downsample(img_vis)
+        # Ensure the display image is uint8 (0..255) to avoid white outputs
+        if img_vis_ds.dtype == np.uint16:
+            img_disp = (img_vis_ds / 257.0).astype(np.uint8)
+        elif img_vis_ds.dtype.kind == 'f':
+            mx = float(np.max(img_vis_ds)) if img_vis_ds.size else 1.0
+            if mx <= 1.0:
+                img_disp = np.clip(img_vis_ds * 255.0, 0, 255).astype(np.uint8)
+            else:
+                img_disp = np.clip(img_vis_ds, 0, 255).astype(np.uint8)
+        elif img_vis_ds.dtype != np.uint8:
+            # generic integer types >8-bit
+            scale = float(np.iinfo(img_vis_ds.dtype).max)
+            img_disp = np.clip((img_vis_ds.astype(np.float64) / scale) * 255.0, 0, 255).astype(np.uint8)
+        else:
+            img_disp = img_vis_ds
         dose_map_ds = _downsample(dose_map)
         mask_ds = _downsample(mask.astype(np.uint8)).astype(bool)
 
@@ -351,7 +373,7 @@ class FilmAnalyzer:
         fig = make_subplots(rows=1, cols=3, column_widths=[0.33, 0.33, 0.34], subplot_titles=("Original", "Dose (Gy)", "Profiles"))
 
         # Panel 1: original image with ROI overlay (red)
-        fig.add_trace(go.Image(z=img_vis_ds), row=1, col=1)
+        fig.add_trace(go.Image(z=img_disp), row=1, col=1)
         # draw ROI outline in red
         if cfg.shape == "circular":
             cx, cy = cfg.center
