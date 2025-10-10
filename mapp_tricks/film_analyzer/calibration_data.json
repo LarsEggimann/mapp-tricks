@@ -1,0 +1,65 @@
+{
+	"EBT3_old_Bologna": {
+		"pars": {
+			"Do": {"value": 4.7956, "error": 0.0},
+			"PVmin": {"value": 45.5929, "error": 0.0},
+			"PVmax": {"value": 159.0524, "error": 0.0},
+			"beta": {"value": -0.9054, "error": 0.0}
+		},
+		"calib_str": "\tOld EBT-3\n\tExp. 02.03.2023\n\tLot 030220102\n\tCalibration at Bologna with GammaCell\n\tdd.mm.2023"
+	},
+	"EBT3_new_Linac_ImageJ": {
+		"pars": {
+			"Do": {"value": 5.62, "error": 0.0},
+			"PVmin": {"value": 16.82, "error": 0.0},
+			"PVmax": {"value": 159.27, "error": 0.0},
+			"beta": {"value": -0.86, "error": 0.0}
+		},
+		"calib_str": "\tNew EBT-3\n\tExp. 02.10.2024\n\tLot 10032202\n\tCalibration at Inselspital with Clinical Linac (ImageJ non-weighted Pixel Values)\n\t25.09.2023"
+	},
+	"EBT3_new_Linac_Py": {
+		"pars": {
+			"Do": {"value": 4.99, "error": 0.0},
+			"PVmin": {"value": 11.73, "error": 0.0},
+			"PVmax": {"value": 168.79, "error": 0.0},
+			"beta": {"value": -0.88, "error": 0.0}
+		},
+		"calib_str": "\tNew EBT-3\n\tExp. 02.10.2024\n\tLot 10032202\n\tCalibration at Inselspital with Clinical Linac (Python weighted Pixel Values)\n\t25.09.2023"
+	},
+	"EBT3_new_METAS_ImageJwRGB": {
+		"pars": {
+			"Do": {"value": 5.19, "error": 0.25},
+			"PVmin": {"value": 8.40, "error": 3.07},
+			"PVmax": {"value": 167.13, "error": 0.41},
+			"beta": {"value": -0.87, "error": 0.02}
+		},
+		"calib_str": "\tNew EBT-3\n\tExp. 02.10.2024\n\tLot 10032202\n\tCalibration at METAS with 60-Co source (ImageJ weighted Pixel Values)\n\t07.11.2023"
+	},
+	"EBT3_old_METAS_ImageJwRGB": {
+		"pars": {
+			"Do": {"value": 5.22, "error": 0.0},
+			"PVmin": {"value": 16.46, "error": 0.0},
+			"PVmax": {"value": 155.37, "error": 0.0},
+			"beta": {"value": -0.87, "error": 0.0}
+		},
+		"calib_str": "\tOld EBT-3\n\tExp. 02.03.2023\n\tLot 030220102\n\tCalibration at METAS with 60-Co source (ImageJ weighted Pixel Values)\n\t07.11.2023"
+	},
+	"EBT3_new_combinedLiMet_ImageJwRGB": {
+		"pars": {
+			"Do": {"value": 5.09, "error": 0.0},
+			"PVmin": {"value": 10.13, "error": 0.0},
+			"PVmax": {"value": 167.96, "error": 0.0},
+			"beta": {"value": -0.88, "error": 0.0}
+		},
+		"calib_str": "\tNew EBT-3\n\tExp. 02.10.2024\n\tLot 10032202\n\tFitted to METAS and Linac data combined (ImageJ weighted Pixel Values)\n\t15.11.2023"
+	},
+	"HDV2": {
+		"pars": {
+			"Do": {"value": 144.58, "error": 0.0},
+			"PVmin": {"value": 47.81, "error": 0.0},
+			"PVmax": {"value": 211.03, "error": 0.0},
+			"beta": {"value": -0.85, "error": 0.0}
+		},
+		"calib_str": "\tNew HD-V2\n\tExp. __\n\tLot ___\n\tCalibration at ISOF Bologna with GammaCell (ImageJ weighted Pixel Values)\n\t19.12.2023"
+	}
+}
