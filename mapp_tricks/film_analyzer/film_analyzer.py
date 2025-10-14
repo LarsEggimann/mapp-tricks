@@ -431,17 +431,31 @@ class FilmAnalyzer:
         fig.update_xaxes(title_text="x [px]", row=1, col=1)
         fig.update_yaxes(title_text="y [px]", row=1, col=1)
 
-        # Panel 2: dose heatmap (mm axes), flip y to top-down mm if desired
+        # Panel 2: dose heatmap (ROI only). Crop to ROI bounding box before plotting.
+        roi_rows = np.where(mask_ds.any(axis=1))[0]
+        roi_cols = np.where(mask_ds.any(axis=0))[0]
+        if roi_rows.size and roi_cols.size:
+            r0, r1 = roi_rows[0], roi_rows[-1] + 1
+            c0, c1 = roi_cols[0], roi_cols[-1] + 1
+            dose_roi = masked_dose[r0:r1, c0:c1]
+            x_mm_roi = x_mm[c0:c1]
+            y_mm_roi = y_mm[r0:r1]
+        else:
+            # Fallback to full image if ROI mask empty
+            dose_roi = masked_dose
+            x_mm_roi = x_mm
+            y_mm_roi = y_mm
+
         fig.add_trace(
             go.Heatmap(
-                z=masked_dose[::-1, :],
-                x=x_mm,
-                y=y_mm[::-1],
+                z=dose_roi[::-1, :],  # invert y for top-down visual
+                x=x_mm_roi,
+                y=y_mm_roi[::-1],
                 coloraxis="coloraxis",
-                colorscale='Viridis',
+                colorscale="Viridis",
                 colorbar=dict(
-                    x=0.58,  # Adjust the horizontal position (relative to the figure width)
-                    xanchor='left',  # Align the left edge of the color bar at the specified `x`
+                    x=0.58,
+                    xanchor='left',
                 ),
                 hovertemplate="x=%{x:.2f} mm y=%{y:.2f} mm dose=%{z:.3f} Gy<extra></extra>",
             ),
