@@ -55,26 +55,21 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
 
     Returns a float64 array in the same dynamic range as the input dtype.
     """
-    if image.ndim == 2:
-        g = image.astype(np.float64)
-    else:
-        # Use first 3 channels
-        rgb = image[..., :3].astype(np.float64)
-        weights = np.array([0.2989, 0.5870, 0.1140], dtype=np.float64)
-        g = np.tensordot(rgb, weights, axes=([-1], [0]))
 
-    # Map to 8-bit-like range [0, 255] to match calibration pixel values
-    # Common cases: uint16 TIFFs. If max > 255, scale down accordingly.
+    rgb = image[..., :3].astype(np.float64)
+    weights = np.array([0.2989, 0.5870, 0.1140], dtype=np.float64)
+    g = np.tensordot(rgb, weights, axes=([-1], [0]))
+
+    # map to 8-bit-like range [0, 255] to match calibration pixel values
+    # most tif are 16-bit color: uint16 TIFFs. If max > 255, scale down accordingly.
     gmax = float(np.nanmax(g)) if np.size(g) > 0 else 0.0
-    if gmax <= 0:
-        return g
     if g.dtype == np.uint16 or gmax > 255:
-        # If original was 16-bit, approximate to 8-bit by dividing by 257
+        # if original was 16-bit, approximate to 8-bit by dividing by 257
         g = g / 257.0
-    elif g.dtype.kind == 'f' and gmax <= 1.0:
-        g = g * 255.0
-    # Clip to [0,255]
+
+    # clip to [0,255]
     g = np.clip(g, 0.0, 255.0)
+
     return g
 
 def _roi_mask(shape: Tuple[int, int], cfg: FileROIConfig) -> np.ndarray:
@@ -91,6 +86,15 @@ def _roi_mask(shape: Tuple[int, int], cfg: FileROIConfig) -> np.ndarray:
         y0, y1 = cy - half_h, cy + half_h
         return (xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)
 
+def _inv_green_saunders(pixel_value: np.ndarray, Do: float, PVmin: float, PVmax: float, beta: float) -> np.ndarray:
+    # avoid division by zero and out-of-range artifacts
+    pv = pixel_value.astype(np.float64)
+    # values smaller than PVmin or larger than PVmax yield NaN dose
+    eps = 1e-9
+    pv = np.where(pv - unp.nominal_values(PVmin) < eps, np.nan, pv)
+    pv = np.where(unp.nominal_values(PVmax) - pv < eps, np.nan, pv)
+    val = Do * ((pv - PVmin) / (PVmax - pv)) ** (1.0 / beta)
+    return val
 
 def _sorted_tif_files(folder: Path) -> List[Path]:
     files = sorted([p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in {".tif", ".tiff"}])
@@ -202,10 +206,14 @@ class FilmAnalyzer:
         data = json.loads(path.read_text(encoding="utf-8"))
         return self.from_dict(data)
 
-    def process_all(self, config: AnalyzerConfig | Dict) -> None:
+    def process_all(self, config: AnalyzerConfig | Dict, simplify_uncertainty: bool = False) -> None:
         """Process all films according to the provided config (dataclass or dict).
 
         Saves Plotly HTML (and PDF if kaleido is available) files into `<folder>/results/<filename>.html`.
+
+        If simplify_uncertainty is True, the uncertainties in the calibration parameters
+        are ignored when computing the mean dose uncertainty (faster, but less accurate) and instead
+        only the standard deviation of the dose values in the ROI is used as uncertainty.
         """
         if isinstance(config, dict):
             config = self.from_dict(config)
@@ -253,11 +261,17 @@ class FilmAnalyzer:
             mask = _roi_mask(gray.shape, cfg)
 
             # dose map using inverse Green-Saunders calibration
-            dose_map = self._dose_map_from_calibration(gray, cfg.max_dose)
+            dose_map = self._dose_map_from_calibration(gray, mask, cfg.max_dose) # in Gy, 2d array of floats
 
-            # Compute ROI mean dose with calibration uncertainty propagation
-            mean_dose = self._roi_mean_with_calib_uncertainty(gray, mask, cfg.max_dose)
-
+            # compute ROI mean dose with calibration uncertainty propagation
+            if simplify_uncertainty:
+                # faster, but less accurate: ignore calibration uncertainties
+                mean_dose = np.nanmean(dose_map)
+                std_mean = np.nanstd(dose_map)
+                mean_dose = ufloat(mean_dose, std_mean)
+            else:
+                mean_dose = self._roi_mean_with_calib_uncertainty(gray, mask, cfg.max_dose) # in Gy, ufloat
+            
             # Plot result
             fig = self._make_plot(img, dose_map, mask, cfg, mean_dose)
             out_html = results_folder / f"{f.stem}.html"
@@ -277,8 +291,7 @@ class FilmAnalyzer:
                 )
                 print(msg)
 
-            if not use_tqdm and self.progress_mode in ("print", "auto"):
-                print(f"Saved: {out_html.name} - ROI mean dose {mean_dose.n:.3f} ± {mean_dose.s:.3f} Gy")
+            print(f"Saved: {out_html.name} - ROI mean dose {mean_dose:.} Gy (simplify_uncertainty={simplify_uncertainty})")
 
     # --- Calibration & dose ---
     def _load_calibration(self, key: str) -> Dict:
@@ -299,67 +312,46 @@ class FilmAnalyzer:
             )
             print(f"- {k}: {data[k].get('calib_str', 'No description')}\n    Parameters: {pars_str}")
 
-    @staticmethod
-    def _inv_green_saunders(pixel_value: np.ndarray, Do: float, PVmin: float, PVmax: float, beta: float) -> np.ndarray:
-        # Avoid division by zero and out-of-range artifacts
-        pv = pixel_value.astype(np.float64)
-        # Clip pixel values slightly within [PVmin+eps, PVmax-eps]
-        eps = 1e-9
-        pv = np.clip(pv, PVmin + eps, PVmax - eps)
-        val = Do * ((pv - PVmin) / (PVmax - pv)) ** (1.0 / beta)
-        return np.nan_to_num(val, nan=0.0, posinf=0.0, neginf=0.0)
-
-    def _dose_map_from_calibration(self, gray: np.ndarray, max_dose: float) -> np.ndarray:
-        # luminance-based grayscale as pixel value input to inverse Green-Saunders
-        g = gray.astype(np.float64)
+    def _get_calibration_parameters(self) -> Tuple[float, float, float, float]:
         pars = self.calibration["pars"]
-        # Build ufloat parameters; for the map we use nominal values; for ROI stats we carry std separately
+        Do = float(pars["Do"]["value"])
+        PVmin = float(pars["PVmin"]["value"])
+        PVmax = float(pars["PVmax"]["value"])
+        beta = float(pars["beta"]["value"])
+        return Do, PVmin, PVmax, beta
+    
+    def _get_calibration_parameters_as_ufloat(self) -> Tuple[ufloat, ufloat, ufloat, ufloat]:
+        pars = self.calibration["pars"]
         Do = ufloat(pars["Do"]["value"], pars["Do"].get("error", 0.0))
         PVmin = ufloat(pars["PVmin"]["value"], pars["PVmin"].get("error", 0.0))
         PVmax = ufloat(pars["PVmax"]["value"], pars["PVmax"].get("error", 0.0))
         beta = ufloat(pars["beta"]["value"], pars["beta"].get("error", 0.0))
+        return Do, PVmin, PVmax, beta
 
-        dose_nominal = self._inv_green_saunders(g, Do.n, PVmin.n, PVmax.n, beta.n)
-        # Limit by max_dose (clamp rather than zeroing to preserve signal)
-        dose_nominal = np.minimum(dose_nominal, float(max_dose))
-        return dose_nominal
+    def _dose_map_from_calibration(self, gray: np.ndarray, mask: np.ndarray, max_dose: float) -> np.ndarray:
+        # luminance-based grayscale as pixel value input to inverse Green-Saunders
+        g_masked = np.where(mask, gray.astype(np.float64), np.nan)
+        Do, PVmin, PVmax, beta = self._get_calibration_parameters()
+        dose_map = _inv_green_saunders(g_masked, Do, PVmin, PVmax, beta)
+        dose_map = np.where(dose_map > max_dose, np.nan, dose_map)  # set to nan if above max_dose
+        return dose_map
 
     def _roi_mean_with_calib_uncertainty(self, gray: np.ndarray, mask: np.ndarray, max_dose: float) -> ufloat:
-        # Use ufloats to propagate calibration parameter uncertainties automatically
+        # use ufloats to propagate calibration parameter uncertainties automatically
         roi_indices = np.where(mask)
         if roi_indices[0].size == 0:
             return ufloat(0.0, 0.0)
-
-        # # If ROI is very large, subsample to keep it manageable
-        # max_samples = 100_000
-        # if roi_indices[0].size > max_samples:
-        #     # stride in both dims to roughly keep under max_samples
-        #     stride = int(np.ceil(np.sqrt(roi_indices[0].size / max_samples)))
-        #     sampled_mask = np.zeros_like(mask, dtype=bool)
-        #     sampled_mask[::stride, ::stride] = mask[::stride, ::stride]
-        #     roi_indices = np.where(sampled_mask)
-
         pv = gray.astype(np.float64)[roi_indices]
-        pars = self.calibration["pars"]
-        Do = ufloat(pars["Do"]["value"], pars["Do"].get("error", 0.0))
-        PVmin = ufloat(pars["PVmin"]["value"], pars["PVmin"].get("error", 0.0))
-        PVmax = ufloat(pars["PVmax"]["value"], pars["PVmax"].get("error", 0.0))
-        beta = ufloat(pars["beta"]["value"], pars["beta"].get("error", 0.0))
-
-        # Compute dose as UFloat array
-        # Clip pv into (PVmin, PVmax) using nominal values for stability in the ratio
-        pv_clip = np.clip(pv, PVmin.n + 1e-9, PVmax.n - 1e-9)
-        ratio = (pv_clip - PVmin) / (PVmax - pv_clip)
-        dose_u = Do * ratio ** (1.0 / beta)
-
+        Do, PVmin, PVmax, beta = self._get_calibration_parameters_as_ufloat()
+        # compute dose as ufloat array
+        dose_u = _inv_green_saunders(pv, Do, PVmin, PVmax, beta)
         # Apply max_dose cutoff using nominal values (clamp to max_dose)
         dose_nom = unp.nominal_values(dose_u)
         above = dose_nom > max_dose
         if np.any(above):
-            dose_u = dose_u.copy()
-            dose_u[above] = ufloat(float(max_dose), 0.0)
-
-        # Mean with proper uncertainty propagation
+            # remove values above max_dose
+            dose_u = dose_u[~above]
+        # mean with proper uncertainty propagation using ufloats
         mean_u = np.sum(dose_u) / len(dose_u)
         return mean_u
 
