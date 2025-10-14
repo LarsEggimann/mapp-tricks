@@ -313,12 +313,8 @@ class FilmAnalyzer:
             print(f"- {k}: {data[k].get('calib_str', 'No description')}\n    Parameters: {pars_str}")
 
     def _get_calibration_parameters(self) -> Tuple[float, float, float, float]:
-        pars = self.calibration["pars"]
-        Do = float(pars["Do"]["value"])
-        PVmin = float(pars["PVmin"]["value"])
-        PVmax = float(pars["PVmax"]["value"])
-        beta = float(pars["beta"]["value"])
-        return Do, PVmin, PVmax, beta
+        Do, PVmin, PVmax, beta = self._get_calibration_parameters_as_ufloat()
+        return Do.n, PVmin.n, PVmax.n, beta.n
     
     def _get_calibration_parameters_as_ufloat(self) -> Tuple[ufloat, ufloat, ufloat, ufloat]:
         pars = self.calibration["pars"]
@@ -356,7 +352,7 @@ class FilmAnalyzer:
         return mean_u
 
     def _make_plot(self, image_rgb_like: np.ndarray, dose_map: np.ndarray, mask: np.ndarray, cfg: FileROIConfig, mean_dose: ufloat) -> go.Figure:
-        # Downsample for plotting to reduce HTML size
+        # downsample for plotting to reduce HTML size
         ds = self.plot_downsample
         step = max(1, int(round(1.0 / ds))) if ds < 1.0 else 1
         def _downsample(arr: np.ndarray) -> np.ndarray:
@@ -365,7 +361,7 @@ class FilmAnalyzer:
             # use slicing for speed; nearest-neighbor like
             return arr[::step, ::step] if arr.ndim == 2 else arr[::step, ::step, ...]
 
-        # Convert to 3-channel if needed, then downsample for view
+        # convert to 3-channel if needed, then downsample for view
         if image_rgb_like.ndim == 2:
             img_vis = np.stack([image_rgb_like] * 3, axis=-1)
         elif image_rgb_like.shape[-1] == 4:
@@ -374,7 +370,7 @@ class FilmAnalyzer:
             img_vis = image_rgb_like
 
         img_vis_ds = _downsample(img_vis)
-        # Ensure the display image is uint8 (0..255) to avoid white outputs
+        # ensure the display image is uint8 (0..255) to avoid white outputs
         if img_vis_ds.dtype == np.uint16:
             img_disp = (img_vis_ds / 257.0).astype(np.uint8)
         elif img_vis_ds.dtype.kind == 'f':
@@ -392,7 +388,7 @@ class FilmAnalyzer:
         dose_map_ds = _downsample(dose_map)
         mask_ds = _downsample(mask.astype(np.uint8)).astype(bool)
 
-        # Coordinates in mm using DPI
+        # coordinates in mm using DPI
         h, w = dose_map_ds.shape[:2]
         px_to_mm = 25.4 / float(self.dpi)
         x_mm = np.arange(w) * px_to_mm * step
@@ -400,9 +396,15 @@ class FilmAnalyzer:
 
         # Masked dose for heatmap
         masked_dose = np.where(mask_ds, dose_map_ds, np.nan)
+        
 
         # Create 3-panel figure: original with ROI, heatmap, profiles
-        fig = make_subplots(rows=1, cols=3, column_widths=[0.33, 0.33, 0.34], subplot_titles=("Original", "Dose (Gy)", "Profiles"))
+        fig = make_subplots(rows=1, cols=3, column_widths=np.repeat(300, 3).tolist(), row_heights=np.repeat(120, 1).tolist())
+        fig.layout.update(
+            xaxis=dict(domain=[0.0, 0.28]),
+            xaxis2=dict(domain=[0.3, 0.58]),
+            xaxis3=dict(domain=[0.70, 1.0]) # leave some space for the colorbar of the haetmap
+        )
 
         # Panel 1: original image with ROI overlay (red)
         fig.add_trace(go.Image(z=img_disp), row=1, col=1)
@@ -416,7 +418,7 @@ class FilmAnalyzer:
             xs = cx_ds + r_ds * np.cos(theta)
             ys = cy_ds + r_ds * np.sin(theta)
             fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", line=dict(color="red", width=1), name="ROI", showlegend=False), row=1, col=1)
-        else:
+        elif cfg.shape == "rectangular":
             cx, cy = cfg.center
             half_w = int((cfg.width or 2) // 2) // step
             half_h = int((cfg.height or 2) // 2) // step
@@ -425,13 +427,24 @@ class FilmAnalyzer:
             y0, y1 = cy_ds - half_h, cy_ds + half_h
             fig.add_trace(go.Scatter(x=[x0, x1, x1, x0, x0], y=[y0, y0, y1, y1, y0], mode="lines", line=dict(color="red", width=1), showlegend=False), row=1, col=1)
 
+
         fig.update_xaxes(title_text="x [px]", row=1, col=1)
         fig.update_yaxes(title_text="y [px]", row=1, col=1)
 
         # Panel 2: dose heatmap (mm axes), flip y to top-down mm if desired
         fig.add_trace(
-            go.Heatmap(z=masked_dose[::-1, :], x=x_mm, y=y_mm[::-1], coloraxis="coloraxis",
-                       hovertemplate="x=%{x:.2f} mm y=%{y:.2f} mm dose=%{z:.3f} Gy<extra></extra>"),
+            go.Heatmap(
+                z=masked_dose[::-1, :],
+                x=x_mm,
+                y=y_mm[::-1],
+                coloraxis="coloraxis",
+                colorscale='Viridis',
+                colorbar=dict(
+                    x=0.58,  # Adjust the horizontal position (relative to the figure width)
+                    xanchor='left',  # Align the left edge of the color bar at the specified `x`
+                ),
+                hovertemplate="x=%{x:.2f} mm y=%{y:.2f} mm dose=%{z:.3f} Gy<extra></extra>",
+            ),
             row=1, col=2,
         )
         fig.update_xaxes(title_text="x [mm]", row=1, col=2)
