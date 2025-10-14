@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -8,11 +6,11 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, TypedDict
 
 import numpy as np
-from skimage import io  # type: ignore[import-not-found]
-import plotly.graph_objects as go  # type: ignore[import-not-found]
-from plotly.subplots import make_subplots  # type: ignore[import-not-found]
-from uncertainties import ufloat  # type: ignore[import-not-found]
-import uncertainties.unumpy as unp  # type: ignore[import-not-found]
+from skimage import io  # type: ignore
+import plotly.graph_objects as go  # type: ignore
+from plotly.subplots import make_subplots  # type: ignore
+from uncertainties import ufloat  # type: ignore
+import uncertainties.unumpy as unp  # type: ignore
 
 
 Shape = Literal["circular", "rectangular"]
@@ -79,6 +77,20 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
     g = np.clip(g, 0.0, 255.0)
     return g
 
+def _roi_mask(shape: Tuple[int, int], cfg: FileROIConfig) -> np.ndarray:
+    h, w = shape[0], shape[1]
+    yy, xx = np.ogrid[:h, :w]  # creates open mesh grid for indexing
+    cx, cy = cfg.center
+    if cfg.shape == "circular":
+        r = int(cfg.radius or max(1, min(w, h) // 4))
+        return (xx - cx) ** 2 + (yy - cy) ** 2 <= r ** 2
+    else:
+        half_w = int((cfg.width or max(1, w // 2)) // 2)
+        half_h = int((cfg.height or max(1, h // 2)) // 2)
+        x0, x1 = cx - half_w, cx + half_w
+        y0, y1 = cy - half_h, cy + half_h
+        return (xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)
+
 
 def _sorted_tif_files(folder: Path) -> List[Path]:
     files = sorted([p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in {".tif", ".tiff"}])
@@ -94,7 +106,8 @@ class FilmAnalyzer:
         folder: Path | str,
         dpi: int = 400,
         calibration_key: str = "EBT3_new_METAS_ImageJwRGB",
-        plot_downsample: float = 0.5,
+        plot_downsample: float = 1,
+        progress: Literal["auto", "tqdm", "print", "none"] = "auto",
     ):
         self.folder = Path(folder)
         if not self.folder.exists() or not self.folder.is_dir():
@@ -104,6 +117,7 @@ class FilmAnalyzer:
             raise ValueError(f"No .tif/.tiff files found in folder: {self.folder}")
         self.dpi: int = int(dpi)
         self.plot_downsample: float = float(plot_downsample)
+        self.progress_mode: Literal["auto", "tqdm", "print", "none"] = progress
         # Load calibration data
         self.calibration_key: str = calibration_key
         self.calibration: Dict = self._load_calibration(calibration_key)
@@ -126,7 +140,7 @@ class FilmAnalyzer:
                     radius=radius,
                     max_dose=default_max_dose,
                 )
-            else:
+            elif default_shape == "rectangular":
                 width = int(w * 0.5)
                 height = int(h * 0.5)
                 cfg = FileROIConfig(
@@ -137,6 +151,8 @@ class FilmAnalyzer:
                     height=height,
                     max_dose=default_max_dose,
                 )
+            else:
+                raise ValueError(f"Invalid default_shape: {default_shape}, must be 'circular' or 'rectangular'")
             file_cfgs.append(cfg)
         return AnalyzerConfig(folder=self.folder, files=file_cfgs)
 
@@ -186,11 +202,10 @@ class FilmAnalyzer:
         data = json.loads(path.read_text(encoding="utf-8"))
         return self.from_dict(data)
 
-    # -------- Processing --------
     def process_all(self, config: AnalyzerConfig | Dict) -> None:
         """Process all films according to the provided config (dataclass or dict).
 
-        Saves Plotly HTML files into `<folder>/results/<filename>.html`.
+        Saves Plotly HTML (and PDF if kaleido is available) files into `<folder>/results/<filename>.html`.
         """
         if isinstance(config, dict):
             config = self.from_dict(config)
@@ -201,7 +216,21 @@ class FilmAnalyzer:
         results_folder = self.folder / "results"
         results_folder.mkdir(parents=True, exist_ok=True)
 
-        for f in self.files:
+        # Configure progress iterator
+        total = len(self.files)
+        iterable = self.files
+        use_tqdm = False
+        if self.progress_mode in ("tqdm", "auto"):
+            try:
+                from tqdm.auto import tqdm  # type: ignore[import-not-found]
+                iterable = tqdm(self.files, total=total, desc="Processing films", unit="file")  # type: ignore[assignment]
+                use_tqdm = True
+            except ImportError:
+                use_tqdm = False
+
+        for idx, f in enumerate(iterable, start=1):
+            if not use_tqdm and self.progress_mode in ("print", "auto"):
+                print(f"[{idx}/{total}] Processing {f.name} …")
             cfg = by_name.get(f.name)
             if cfg is None:
                 # if a file was added after config generation, fallback to a simple default
@@ -220,12 +249,11 @@ class FilmAnalyzer:
             img = io.imread(str(f))
             gray = _to_gray(img)
 
-            # Create ROI mask
-            mask = self._roi_mask(gray.shape, cfg)
+            # create ROI mask depending on shape and position
+            mask = _roi_mask(gray.shape, cfg)
 
-            # Dose map using inverse Green-Saunders calibration
+            # dose map using inverse Green-Saunders calibration
             dose_map = self._dose_map_from_calibration(gray, cfg.max_dose)
-            # dose_roi kept if needed for additional stats; not used directly here
 
             # Compute ROI mean dose with calibration uncertainty propagation
             mean_dose = self._roi_mean_with_calib_uncertainty(gray, mask, cfg.max_dose)
@@ -234,22 +262,23 @@ class FilmAnalyzer:
             fig = self._make_plot(img, dose_map, mask, cfg, mean_dose)
             out_html = results_folder / f"{f.stem}.html"
             fig.write_html(str(out_html))
+            # also store the plot as a static PDF for quick viewing
+            out_pdf = results_folder / f"{f.stem}.pdf"
+            try:
+                fig.write_image(str(out_pdf))
+            except RuntimeError as e:
+                # Gracefully handle missing Chrome/Kaleido engine or other export issues.
+                # Keep the HTML output and inform the user how to enable static export.
+                msg = (
+                    f"Warning: Could not save PDF for {f.name}: {e}.\n"
+                    "Static image export uses Plotly's Kaleido engine, which now requires Google Chrome/Chromium.\n"
+                    "To enable PDF export on Linux: either run 'plotly_get_chrome' inside your virtualenv, or install\n"
+                    "Chrome/Chromium via your package manager (e.g., 'sudo dnf install chromium'). Skipping PDF."
+                )
+                print(msg)
 
-    # -------- Helpers --------
-    @staticmethod
-    def _roi_mask(shape: Tuple[int, int], cfg: FileROIConfig) -> np.ndarray:
-        h, w = shape[0], shape[1]
-        yy, xx = np.ogrid[:h, :w]
-        cx, cy = cfg.center
-        if cfg.shape == "circular":
-            r = int(cfg.radius or max(1, min(w, h) // 4))
-            return (xx - cx) ** 2 + (yy - cy) ** 2 <= r ** 2
-        else:
-            half_w = int((cfg.width or max(1, w // 2)) // 2)
-            half_h = int((cfg.height or max(1, h // 2)) // 2)
-            x0, x1 = cx - half_w, cx + half_w
-            y0, y1 = cy - half_h, cy + half_h
-            return (xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)
+            if not use_tqdm and self.progress_mode in ("print", "auto"):
+                print(f"Saved: {out_html.name} - ROI mean dose {mean_dose.n:.3f} ± {mean_dose.s:.3f} Gy")
 
     # --- Calibration & dose ---
     def _load_calibration(self, key: str) -> Dict:
@@ -258,6 +287,17 @@ class FilmAnalyzer:
         if key not in data:
             raise KeyError(f"Calibration '{key}' not found in {calib_path}")
         return data[key]
+    
+    def print_available_calibrations(self) -> None:
+        calib_path = Path(__file__).parent / "calibration_data.json"
+        data = json.loads(calib_path.read_text(encoding="utf-8"))
+        print("Available calibrations:")
+        for k in data.keys():
+            pars = data[k].get('pars', {})
+            pars_str = ", ".join(
+                f"{p}: {v.get('value', 'N/A')} ± {v.get('error', 'N/A')}" for p, v in pars.items()
+            )
+            print(f"- {k}: {data[k].get('calib_str', 'No description')}\n    Parameters: {pars_str}")
 
     @staticmethod
     def _inv_green_saunders(pixel_value: np.ndarray, Do: float, PVmin: float, PVmax: float, beta: float) -> np.ndarray:
@@ -270,7 +310,7 @@ class FilmAnalyzer:
         return np.nan_to_num(val, nan=0.0, posinf=0.0, neginf=0.0)
 
     def _dose_map_from_calibration(self, gray: np.ndarray, max_dose: float) -> np.ndarray:
-        # Use luminance-based grayscale as pixel value input to inverse Green-Saunders
+        # luminance-based grayscale as pixel value input to inverse Green-Saunders
         g = gray.astype(np.float64)
         pars = self.calibration["pars"]
         # Build ufloat parameters; for the map we use nominal values; for ROI stats we carry std separately
@@ -290,14 +330,14 @@ class FilmAnalyzer:
         if roi_indices[0].size == 0:
             return ufloat(0.0, 0.0)
 
-        # If ROI is very large, subsample to keep it manageable
-        max_samples = 100_000
-        if roi_indices[0].size > max_samples:
-            # stride in both dims to roughly keep under max_samples
-            stride = int(np.ceil(np.sqrt(roi_indices[0].size / max_samples)))
-            sampled_mask = np.zeros_like(mask, dtype=bool)
-            sampled_mask[::stride, ::stride] = mask[::stride, ::stride]
-            roi_indices = np.where(sampled_mask)
+        # # If ROI is very large, subsample to keep it manageable
+        # max_samples = 100_000
+        # if roi_indices[0].size > max_samples:
+        #     # stride in both dims to roughly keep under max_samples
+        #     stride = int(np.ceil(np.sqrt(roi_indices[0].size / max_samples)))
+        #     sampled_mask = np.zeros_like(mask, dtype=bool)
+        #     sampled_mask[::stride, ::stride] = mask[::stride, ::stride]
+        #     roi_indices = np.where(sampled_mask)
 
         pv = gray.astype(np.float64)[roi_indices]
         pars = self.calibration["pars"]
@@ -423,9 +463,12 @@ class FilmAnalyzer:
 
         fig.update_layout(
             coloraxis=dict(colorscale="Viridis", colorbar=dict(title="Gy")),
-            title=f"{cfg.filename} — ROI mean dose: {mean_dose.n:.3f} ± {mean_dose.s:.3f} Gy",
+            title=f"{cfg.filename} - ROI mean dose: {mean_dose.n:.3f} ± {mean_dose.s:.3f} Gy",
             margin=dict(l=40, r=40, t=60, b=40),
+            height=300,
+            width=1000,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1.0),
+            template="plotly_white",
         )
         return fig
 
@@ -442,9 +485,22 @@ def _cli() -> None:
     parser.add_argument("--dpi", type=int, default=400, help="Dots per inch for mm scaling")
     parser.add_argument("--calibration", type=str, default="EBT3_new_METAS_ImageJwRGB", help="Calibration key from calibration_data.json")
     parser.add_argument("--plot-downsample", type=float, default=0.5, help="Downsample factor for plots (0<ds<=1; e.g., 0.5 halves resolution)")
+    parser.add_argument(
+        "--progress",
+        type=str,
+        default="auto",
+        choices=["auto", "tqdm", "print", "none"],
+        help="Progress reporting: auto (try tqdm), tqdm (force), print (simple prints), none",
+    )
     args = parser.parse_args()
 
-    analyzer = FilmAnalyzer(args.folder, dpi=args.dpi, calibration_key=args.calibration, plot_downsample=args.plot_downsample)
+    analyzer = FilmAnalyzer(
+        args.folder,
+        dpi=args.dpi,
+        calibration_key=args.calibration,
+        plot_downsample=args.plot_downsample,
+        progress=args.progress,
+    )
     if args.make_default:
         cfg = analyzer.generate_default_config(default_shape=args.shape, default_max_dose=args.max_dose)
         out = Path(args.folder) / "film_config.json"
