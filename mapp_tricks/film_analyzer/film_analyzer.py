@@ -103,6 +103,9 @@ def _sorted_tif_files(folder: Path) -> List[Path]:
 
 class FilmAnalyzer:
     """Analyze a folder of film scans (TIF), per-file ROI config, and save Plotly outputs.
+    Calibration data is loaded from the bundled `calibration_data.json` file.
+    Example usage:
+
     """
 
     def __init__(
@@ -126,7 +129,6 @@ class FilmAnalyzer:
         self.calibration_key: str = calibration_key
         self.calibration: Dict = self._load_calibration(calibration_key)
 
-    # -------- Config handling --------
     def generate_default_config(self, default_shape: Shape = "circular", default_max_dose: float = 10.0) -> AnalyzerConfig:
         file_cfgs: List[FileROIConfig] = []
         for f in self.files:
@@ -237,7 +239,7 @@ class FilmAnalyzer:
                 use_tqdm = False
 
         for idx, f in enumerate(iterable, start=1):
-            if not use_tqdm and self.progress_mode in ("print", "auto"):
+            if not use_tqdm:
                 print(f"[{idx}/{total}] Processing {f.name} …")
             cfg = by_name.get(f.name)
             if cfg is None:
@@ -293,7 +295,6 @@ class FilmAnalyzer:
 
             print(f"Saved: {out_html.name} - ROI mean dose {mean_dose:.} Gy (simplify_uncertainty={simplify_uncertainty})")
 
-    # --- Calibration & dose ---
     def _load_calibration(self, key: str) -> Dict:
         calib_path = Path(__file__).parent / "calibration_data.json"
         data = json.loads(calib_path.read_text(encoding="utf-8"))
@@ -448,15 +449,10 @@ class FilmAnalyzer:
 
         fig.add_trace(
             go.Heatmap(
-                z=dose_roi[::-1, :],  # invert y for top-down visual
+                z=dose_roi,
                 x=x_mm_roi,
-                y=y_mm_roi[::-1],
+                y=y_mm_roi,
                 coloraxis="coloraxis",
-                colorscale="Viridis",
-                colorbar=dict(
-                    x=0.58,
-                    xanchor='left',
-                ),
                 hovertemplate="x=%{x:.2f} mm y=%{y:.2f} mm dose=%{z:.3f} Gy<extra></extra>",
             ),
             row=1, col=2,
@@ -478,10 +474,18 @@ class FilmAnalyzer:
         fig.add_trace(go.Scatter(x=horiz_x, y=horiz_v, mode='lines', name='horizontal', line=dict(width=1.2)), row=1, col=3)
         fig.add_trace(go.Scatter(x=vert_y, y=vert_v, mode='lines', name='vertical', line=dict(width=1.2)), row=1, col=3)
         fig.update_xaxes(title_text="x,y [mm]", row=1, col=3)
-        fig.update_yaxes(title_text="Dose [Gy]", row=1, col=3)
+        # Move the right subplot's y-axis title to the right to avoid overlapping with the colorbar
+        fig.update_yaxes(title_text="Dose [Gy]", title_standoff=1, row=1, col=3)
 
         fig.update_layout(
-            coloraxis=dict(colorscale="Viridis", colorbar=dict(title="Gy")),
+            coloraxis=dict(
+                colorscale="Viridis",
+                colorbar=dict(
+                    title="Gy",
+                    x=0.58,  # place colorbar just to the right of subplot 2 (domain ends at 0.58)
+                    xanchor="left",
+                ),
+            ),
             title=f"{cfg.filename} - ROI mean dose: {mean_dose.n:.3f} ± {mean_dose.s:.3f} Gy",
             margin=dict(l=40, r=40, t=60, b=40),
             height=300,
@@ -491,51 +495,4 @@ class FilmAnalyzer:
         )
         return fig
 
-
-def _cli() -> None:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Analyze a folder of TIF film images.")
-    parser.add_argument("folder", type=str, help="Folder containing .tif files")
-    parser.add_argument("--make-default-config", dest="make_default", action="store_true", help="Generate default config JSON and exit")
-    parser.add_argument("--config", type=str, help="Path to config JSON for processing")
-    parser.add_argument("--shape", type=str, default="circular", choices=["circular", "rectangular"], help="Default shape for generated config")
-    parser.add_argument("--max-dose", type=float, default=10.0, help="Default max dose for generated config")
-    parser.add_argument("--dpi", type=int, default=400, help="Dots per inch for mm scaling")
-    parser.add_argument("--calibration", type=str, default="EBT3_new_METAS_ImageJwRGB", help="Calibration key from calibration_data.json")
-    parser.add_argument("--plot-downsample", type=float, default=0.5, help="Downsample factor for plots (0<ds<=1; e.g., 0.5 halves resolution)")
-    parser.add_argument(
-        "--progress",
-        type=str,
-        default="auto",
-        choices=["auto", "tqdm", "print", "none"],
-        help="Progress reporting: auto (try tqdm), tqdm (force), print (simple prints), none",
-    )
-    args = parser.parse_args()
-
-    analyzer = FilmAnalyzer(
-        args.folder,
-        dpi=args.dpi,
-        calibration_key=args.calibration,
-        plot_downsample=args.plot_downsample,
-        progress=args.progress,
-    )
-    if args.make_default:
-        cfg = analyzer.generate_default_config(default_shape=args.shape, default_max_dose=args.max_dose)
-        out = Path(args.folder) / "film_config.json"
-        analyzer.save_config(cfg, out)
-        print(f"Wrote default config to {out}")
-        analyzer.print_config(cfg)
-        return
-
-    if not args.config:
-        raise SystemExit("--config is required unless --make-default-config is used")
-
-    cfg = analyzer.load_config(args.config)
-    analyzer.process_all(cfg)
-    print(f"Done. Results in {Path(args.folder) / 'results'}")
-
-
-if __name__ == "__main__":
-    _cli()
 
