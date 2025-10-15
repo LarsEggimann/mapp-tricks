@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, TypedDict
 
 import numpy as np
+import pandas as pd # type: ignore
 from skimage import io  # type: ignore
 import plotly.graph_objects as go  # type: ignore
 from plotly.subplots import make_subplots  # type: ignore
@@ -238,6 +239,7 @@ class FilmAnalyzer:
             except ImportError:
                 use_tqdm = False
 
+        results_rows = []
         for idx, f in enumerate(iterable, start=1):
             if not use_tqdm:
                 print(f"[{idx}/{total}] Processing {f.name} …")
@@ -295,6 +297,29 @@ class FilmAnalyzer:
 
             print(f"Saved: {out_html.name} - ROI mean dose {mean_dose:.} Gy (simplify_uncertainty={simplify_uncertainty})")
 
+            results_rows.append({
+                "filename": f.name,
+                "shape": cfg.shape,
+                "center_x": cfg.center[0],
+                "center_y": cfg.center[1],
+                "radius": cfg.radius if cfg.shape == "circular" else None,
+                "width": cfg.width if cfg.shape == "rectangular" else None,
+                "height": cfg.height if cfg.shape == "rectangular" else None,
+                "max_dose": cfg.max_dose,
+                "mean_dose": unp.nominal_values(mean_dose),
+                "mean_dose_unc": unp.std_devs(mean_dose),
+                "calibration_key": self.calibration_key,
+                "dpi": self.dpi,
+                "plot_downsample": self.plot_downsample,
+                "simplify_uncertainty": simplify_uncertainty,
+            })
+        # Save summary CSV
+        results_path = results_folder / "summary.csv"
+        df = pd.DataFrame(results_rows)
+        df.to_csv(results_path, index=False)
+        print(f"Summary saved: {results_path.absolute()} ({len(df)} entries)")
+
+
     def _load_calibration(self, key: str) -> Dict:
         calib_path = Path(__file__).parent / "calibration_data.json"
         data = json.loads(calib_path.read_text(encoding="utf-8"))
@@ -349,7 +374,7 @@ class FilmAnalyzer:
             # remove values above max_dose
             dose_u = dose_u[~above]
         # mean with proper uncertainty propagation using ufloats
-        mean_u = np.sum(dose_u) / len(dose_u)
+        mean_u: ufloat = np.sum(dose_u) / len(dose_u)
         return mean_u
 
     def _make_plot(self, image_rgb_like: np.ndarray, dose_map: np.ndarray, mask: np.ndarray, cfg: FileROIConfig, mean_dose: ufloat) -> go.Figure:
