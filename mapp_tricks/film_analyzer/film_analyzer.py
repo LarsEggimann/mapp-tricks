@@ -233,10 +233,12 @@ class FilmAnalyzer:
         use_tqdm = False
         if self.progress_mode in ("tqdm", "auto"):
             try:
-                from tqdm.auto import tqdm  # type: ignore[import-not-found]
+                import importlib
+                _tqdm_mod = importlib.import_module("tqdm.auto")
+                tqdm = getattr(_tqdm_mod, "tqdm")
                 iterable = tqdm(self.files, total=total, desc="Processing films", unit="file")  # type: ignore[assignment]
                 use_tqdm = True
-            except ImportError:
+            except Exception:
                 use_tqdm = False
 
         results_rows = []
@@ -379,12 +381,12 @@ class FilmAnalyzer:
 
     def _make_plot(self, image_rgb_like: np.ndarray, dose_map: np.ndarray, mask: np.ndarray, cfg: FileROIConfig, mean_dose: ufloat) -> go.Figure:
         # downsample for plotting to reduce HTML size
-        ds = self.plot_downsample
+        ds = float(self.plot_downsample)
         step = max(1, int(round(1.0 / ds))) if ds < 1.0 else 1
+
         def _downsample(arr: np.ndarray) -> np.ndarray:
-            if ds == 1.0:
+            if step == 1:
                 return arr
-            # use slicing for speed; nearest-neighbor like
             return arr[::step, ::step] if arr.ndim == 2 else arr[::step, ::step, ...]
 
         # convert to 3-channel if needed, then downsample for view
@@ -406,77 +408,79 @@ class FilmAnalyzer:
             else:
                 img_disp = np.clip(img_vis_ds, 0, 255).astype(np.uint8)
         elif img_vis_ds.dtype != np.uint8:
-            # generic integer types >8-bit
             scale = float(np.iinfo(img_vis_ds.dtype).max)
             img_disp = np.clip((img_vis_ds.astype(np.float64) / scale) * 255.0, 0, 255).astype(np.uint8)
         else:
             img_disp = img_vis_ds
+
         dose_map_ds = _downsample(dose_map)
         mask_ds = _downsample(mask.astype(np.uint8)).astype(bool)
 
-        # coordinates in mm using DPI
+        # coordinates in mm using DPI (per downsampled pixel)
         h, w = dose_map_ds.shape[:2]
-        px_to_mm = 25.4 / float(self.dpi)
-        x_mm = np.arange(w) * px_to_mm * step
-        y_mm = np.arange(h) * px_to_mm * step
+        px_to_mm_ds = (25.4 / float(self.dpi)) * step
 
-        # Masked dose for heatmap
+        # Mask out non-ROI and then crop to ROI bounding box
         masked_dose = np.where(mask_ds, dose_map_ds, np.nan)
-        
+        roi_rows = np.where(mask_ds.any(axis=1))[0]
+        roi_cols = np.where(mask_ds.any(axis=0))[0]
+        if roi_rows.size == 0 or roi_cols.size == 0:
+            r0, r1, c0, c1 = 0, h, 0, w
+        else:
+            r0, r1 = roi_rows[0], roi_rows[-1] + 1
+            c0, c1 = roi_cols[0], roi_cols[-1] + 1
+        dose_roi = masked_dose[r0:r1, c0:c1]
+
+        # Build centered axes shared by heatmap and profiles: [-roi/2, +roi/2] in mm
+        roi_h = r1 - r0
+        roi_w = c1 - c0
+        x_mm_centered = (np.arange(roi_w) - (roi_w - 1) / 2.0) * px_to_mm_ds
+        y_mm_centered = (np.arange(roi_h) - (roi_h - 1) / 2.0) * px_to_mm_ds
 
         # Create 3-panel figure: original with ROI, heatmap, profiles
         fig = make_subplots(rows=1, cols=3, column_widths=np.repeat(300, 3).tolist(), row_heights=np.repeat(120, 1).tolist())
         fig.layout.update(
             xaxis=dict(domain=[0.0, 0.28]),
             xaxis2=dict(domain=[0.3, 0.58]),
-            xaxis3=dict(domain=[0.70, 1.0]) # leave some space for the colorbar of the haetmap
+            xaxis3=dict(domain=[0.70, 1.0])
         )
 
         # Panel 1: original image with ROI overlay (red)
         fig.add_trace(go.Image(z=img_disp), row=1, col=1)
-        # draw ROI outline in red
         if cfg.shape == "circular":
             cx, cy = cfg.center
             r = int(cfg.radius or 1)
-            # scale centers by downsample step
-            cx_ds, cy_ds, r_ds = cx // step, cy // step, r // step
+            cx_ds, cy_ds, r_ds = cx // step, cy // step, max(1, r // step)
             theta = np.linspace(0, 2 * np.pi, 256)
             xs = cx_ds + r_ds * np.cos(theta)
             ys = cy_ds + r_ds * np.sin(theta)
-            fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", line=dict(color="red", width=1), name="ROI", showlegend=False), row=1, col=1)
+            fig.add_trace(
+                go.Scatter(x=xs, y=ys, mode="lines", line=dict(color="red", width=1), name="ROI", showlegend=False),
+                row=1, col=1,
+            )
         elif cfg.shape == "rectangular":
             cx, cy = cfg.center
-            half_w = int((cfg.width or 2) // 2) // step
-            half_h = int((cfg.height or 2) // 2) // step
+            half_w_px = int((cfg.width or 2) // 2)
+            half_h_px = int((cfg.height or 2) // 2)
             cx_ds, cy_ds = cx // step, cy // step
-            x0, x1 = cx_ds - half_w, cx_ds + half_w
-            y0, y1 = cy_ds - half_h, cy_ds + half_h
-            fig.add_trace(go.Scatter(x=[x0, x1, x1, x0, x0], y=[y0, y0, y1, y1, y0], mode="lines", line=dict(color="red", width=1), showlegend=False), row=1, col=1)
-
+            half_w_ds = max(1, half_w_px // step)
+            half_h_ds = max(1, half_h_px // step)
+            x0, x1 = cx_ds - half_w_ds, cx_ds + half_w_ds
+            y0, y1 = cy_ds - half_h_ds, cy_ds + half_h_ds
+            fig.add_trace(
+                go.Scatter(x=[x0, x1, x1, x0, x0], y=[y0, y0, y1, y1, y0], mode="lines", line=dict(color="red", width=1), showlegend=False),
+                row=1, col=1,
+            )
 
         fig.update_xaxes(title_text="x [px]", row=1, col=1)
         fig.update_yaxes(title_text="y [px]", row=1, col=1)
 
-        # Panel 2: dose heatmap (ROI only). Crop to ROI bounding box before plotting.
-        roi_rows = np.where(mask_ds.any(axis=1))[0]
-        roi_cols = np.where(mask_ds.any(axis=0))[0]
-        if roi_rows.size and roi_cols.size:
-            r0, r1 = roi_rows[0], roi_rows[-1] + 1
-            c0, c1 = roi_cols[0], roi_cols[-1] + 1
-            dose_roi = masked_dose[r0:r1, c0:c1]
-            x_mm_roi = x_mm[c0:c1]
-            y_mm_roi = y_mm[r0:r1]
-        else:
-            # Fallback to full image if ROI mask empty
-            dose_roi = masked_dose
-            x_mm_roi = x_mm
-            y_mm_roi = y_mm
-
+        # Panel 2: dose heatmap (ROI only) with centered axes
         fig.add_trace(
             go.Heatmap(
                 z=dose_roi,
-                x=x_mm_roi,
-                y=y_mm_roi,
+                x=x_mm_centered,
+                y=y_mm_centered,
                 coloraxis="coloraxis",
                 hovertemplate="x=%{x:.2f} mm y=%{y:.2f} mm dose=%{z:.3f} Gy<extra></extra>",
             ),
@@ -485,16 +489,17 @@ class FilmAnalyzer:
         fig.update_xaxes(title_text="x [mm]", row=1, col=2)
         fig.update_yaxes(title_text="y [mm]", row=1, col=2)
 
-        # Panel 3: profiles (horizontal and vertical) from center lines
-        cy_idx = h // 2
-        cx_idx = w // 2
-        horiz = masked_dose[cy_idx, :]
-        vert = masked_dose[:, cx_idx]
-        # remove NaNs
-        horiz_v = horiz[~np.isnan(horiz)]
-        horiz_x = x_mm[~np.isnan(horiz)]
-        vert_v = vert[~np.isnan(vert)]
-        vert_y = y_mm[~np.isnan(vert)]
+        # Panel 3: profiles (horizontal and vertical) from ROI center lines (centered axes)
+        cy_roi_idx = (dose_roi.shape[0] - 1) // 2
+        cx_roi_idx = (dose_roi.shape[1] - 1) // 2
+        horiz = dose_roi[cy_roi_idx, :]
+        vert = dose_roi[:, cx_roi_idx]
+        horiz_mask = ~np.isnan(horiz)
+        vert_mask = ~np.isnan(vert)
+        horiz_v = horiz[horiz_mask]
+        horiz_x = x_mm_centered[horiz_mask]
+        vert_v = vert[vert_mask]
+        vert_y = y_mm_centered[vert_mask]
 
         fig.add_trace(go.Scatter(x=horiz_x, y=horiz_v, mode='lines', name='horizontal', line=dict(width=1.2)), row=1, col=3)
         fig.add_trace(go.Scatter(x=vert_y, y=vert_v, mode='lines', name='vertical', line=dict(width=1.2)), row=1, col=3)
@@ -506,7 +511,7 @@ class FilmAnalyzer:
                 colorscale="Viridis",
                 colorbar=dict(
                     title="Gy",
-                    x=0.58,  # place colorbar just to the right of subplot 2 (domain ends at 0.58)
+                    x=0.59,
                     xanchor="left",
                 ),
             ),
