@@ -284,7 +284,7 @@ class FilmAnalyzer:
             out_pdf = results_folder / f"{f.stem}.pdf"
             try:
                 fig.write_image(str(out_pdf))
-            except RuntimeError as e:
+            except ValueError as e:
                 # Gracefully handle missing Chrome/Kaleido engine or other export issues.
                 # Keep the HTML output and inform the user how to enable static export.
                 msg = (
@@ -499,7 +499,6 @@ class FilmAnalyzer:
         fig.add_trace(go.Scatter(x=horiz_x, y=horiz_v, mode='lines', name='horizontal', line=dict(width=1.2)), row=1, col=3)
         fig.add_trace(go.Scatter(x=vert_y, y=vert_v, mode='lines', name='vertical', line=dict(width=1.2)), row=1, col=3)
         fig.update_xaxes(title_text="x,y [mm]", row=1, col=3)
-        # Move the right subplot's y-axis title to the right to avoid overlapping with the colorbar
         fig.update_yaxes(title_text="Dose [Gy]", title_standoff=1, row=1, col=3)
 
         fig.update_layout(

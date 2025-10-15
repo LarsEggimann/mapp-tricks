@@ -136,7 +136,7 @@ print(f"Integrated correction factor: {integrated_correction_factor:.3f}")
 The `film_analyzer` module provides tools to analyze scanned images of gafchromic films. It can read the image, extract the RGB channels, and convert the pixel values to dose using a calibration curve defined in a bundled JSON file.
 ### Basic Usage
 ```python
-from mapp_tricks.film_analyzer.film_analyzer import  *
+from mapp_tricks.film_analyzer.film_analyzer import  FilmAnalyzer
 
 fa = FilmAnalyzer(
     folder='./data/film_reader_test_data/',

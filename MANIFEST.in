@@ -1,1 +1,2 @@
 recursive-include mapp_tricks/spectrometer_calibrations/HPGe/calibration-data *.csv
+recursive-include mapp_tricks/film_analyzer *.json
