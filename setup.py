@@ -8,7 +8,7 @@ from pathlib import Path
 
 setup(
     name="mapp_tricks",
-    version="0.1.4",
+    version="0.1.6",
     author="Lars Eggimann",
     author_email="lars.eggimann@gmail.com",
     description="Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern.",

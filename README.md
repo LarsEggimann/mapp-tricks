@@ -131,3 +131,36 @@ integrated_correction_factor = eda.get_integrated_correction_factor(
 
 print(f"Integrated correction factor: {integrated_correction_factor:.3f}")
 ```
+
+## Usage of Film Analyzer
+The `film_analyzer` module provides tools to analyze scanned images of gafchromic films. It can read the image, extract the RGB channels, and convert the pixel values to dose using a calibration curve defined in a bundled JSON file.
+### Basic Usage
+```python
+from mapp_tricks.film_analyzer.film_analyzer import  *
+
+fa = FilmAnalyzer(
+    folder='./data/film_reader_test_data/',
+    dpi=1200,
+    calibration_key='EBT3_new_METAS_ImageJwRGB',
+    plot_downsample=0.5
+)
+```
+In order to analyze films we need information about the center positiona and ROI shape and size. This is done via a config file that can be generated as a template and then has to be edited manually, using the film analyzer is a iterative process.
+To generate a template config file and save it:
+```python
+config = fa.generate_default_config(
+    default_shape='circular',
+    default_max_dose=10.0,
+)
+fa.save_config(config, fa.folder / 'config.json')
+```
+
+Now run the analysis:
+```python
+fa.load_config(fa.folder / 'config.json')
+fa.process_all(config)
+```
+This will create a subfolder `results/` in the folder where the images are located. In this folder you will find dose maps and profiles for each film analyzed and also a summary file `summary.csv` that contains the mean dose and standard deviation and other information in the ROI for each film.
+
+Now use the generated html plots to optimize the config file and re-run the analysis until satisfied. Make sure to not overwrite the config file with the generated one each time you run the analysis -> remove the saving and generating part after the first time.
+

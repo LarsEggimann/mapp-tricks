@@ -1,4 +1,22 @@
 {
+	"EBT4_24h": {
+		"pars": {
+			"Do": {"value": 7.77, "error": 0.27},
+			"PVmin": {"value": 1.7, "error": 2.56},
+			"PVmax": {"value": 165.12, "error": 0.65},
+			"beta": {"value": -0.89, "error": 0.02}
+		},
+		"calib_str": "\tNew EBT-4, 24h\n\tExp. ??\n\tLot ??\n\tCalibration done by Eva\n\t07.04.2025"
+	},
+	"EBT4_48h": {
+		"pars": {
+			"Do": {"value": 7.48, "error": 0.15},
+			"PVmin": {"value": 2.79, "error": 1.50},
+			"PVmax": {"value": 165.25, "error": 0.39},
+			"beta": {"value": -0.89, "error": 0.01}
+		},
+		"calib_str": "\tNew EBT-4, 48h\n\tExp. ??\n\tLot ??\n\tCalibration done by Eva\n\t07.04.2025"
+	},
 	"EBT3_old_Bologna": {
 		"pars": {
 			"Do": {"value": 4.7956, "error": 0.0},
