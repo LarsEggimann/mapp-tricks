@@ -65,8 +65,8 @@ class XRayCalibration:
         # Base paths (relative to this file)
         self._file_dir = Path(__file__).resolve().parent
         self._xray_base = self._file_dir
-        self._results_dir   = self._xray_base / "calibration_files" / "result files calibration" / self.setup_name / self._level_str()
-        self._eff_files_dir = self._xray_base / "calibration_files" / "SDD Efficiency files"
+        self._results_dir   = self._xray_base / "calibration-data" / "result files calibration" / self.setup_name / self._level_str()
+        self._eff_files_dir = self._xray_base / "calibration-data" / "SDD Efficiency files"
 
         # Load calibration result (a, b, cov) and data points used for fit
         txt_path = self._latest_result_file(self._results_dir)
@@ -113,7 +113,7 @@ class XRayCalibration:
 
         return eta_u
 
-    def plot(self, store_path: Optional[Union[str, Path]] = None) -> Figure:
+    def get_plot(self, store_path: Optional[Union[str, Path]] = None) -> Figure:
         """
         Plot calibration data points, fitted curve and 1-sigma band.
         If store_path is provided, store the figure there. If a directory is given,

@@ -15,7 +15,7 @@ from scipy.interpolate import interp1d
 from scipy.integrate import quad
 from scipy.integrate import dblquad
 
-files_path = Path(__file__).resolve().parent.parent / 'calibration_files'
+files_path = Path(__file__).resolve().parent.parent / 'calibration-data'
 
 # %% basic functions
 def _load_NIST_data_and_return_file():
