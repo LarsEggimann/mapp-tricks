@@ -1,4 +1,9 @@
-# Build in package directory
+# Build and release instructions
+
+You can use the release script in `scripts/release.py` to automate the process. See [these instructions](scripts/README.md) for details.
+
+## Manual build instructions
+
 Make sure to bump version in `pyproject.toml`, `setup.py` and `mapp_tricks/__init__.py`.
 
 Make sure you have build installed, `pip install build`
