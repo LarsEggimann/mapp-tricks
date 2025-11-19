@@ -93,7 +93,7 @@ class XRayCalibration:
     # ---------- public API ----------
     def evaluate_efficiency_at(self, energy_in_keV: Union[float, ufloat]) -> ufloat:
         """
-        Evaluate efficiency at a given energy and return as ufloat (value ± fit error),
+        Evaluate efficiency at a given energy in keV and return as ufloat (value ± fit error),
         including multiplicative corrections for finite source radius and geometry.
         """
         E = energy_in_keV.n if isinstance(energy_in_keV, Variable) else float(energy_in_keV)

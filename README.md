@@ -58,8 +58,26 @@ calibration.plot_fit()
 ```
 
 ## Usage of X-ray Spectrometer Efficiency Calibration
-This module was developed by Samuel Dominique Juillerat.
+The math and general implementation was developed by Samuel Dominique Juillerat (TODO: add link to rhodium paper once published or his masters thesis). I wrapped it in a class to make the functionality easily accessible in a package.
 
+Basic usage is similar to the `HPGeCalibration` module.
+
+```python
+from mapp_tricks.spectrometer_calibrations import XRayCalibration
+
+calib = XRayCalibration(level=10, source_radius=0)
+eff = calib.evaluate_efficiency_at(energy_in_keV=40) # energy_in_keV can also be a ufloat
+```
+Note that for a `source_radius > 0` the efficiency calculation accounts for the geometry of a disk source with given radius. This computation takes very long (several seconds) since it performs integration over the source surface and detector surface. For point like sources (source_radius=0) the computation is almost instant and is default value.
+
+To get the plot of the efficiency calibration fit:
+```python
+fig = calib.get_plot()
+```
+
+Which will return the matplotlib figure object (Samuel implemented this module with matplotlib). 
+
+Note that this plot will be for a point like source and does not account for extended source geometries even if the calibration was initialized with a non-zero source radius.
 
 
 ## Usage Orbitos Utils
