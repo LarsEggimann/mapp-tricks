@@ -70,6 +70,9 @@ eff = calib.evaluate_efficiency_at(energy_in_keV=40) # energy_in_keV can also be
 ```
 Note that for a `source_radius > 0` the efficiency calculation accounts for the geometry of a disk source with given radius. This computation takes very long (several seconds) since it performs integration over the source surface and detector surface. For point like sources (source_radius=0) the computation is almost instant and is default value.
 
+**Important:** For measurements on lower the levels the influence of the `source_radius` becomes more important since the detector is closer to the source. There the trade-off between computation time and accuracy has to be considered.
+
+
 To get the plot of the efficiency calibration fit:
 ```python
 fig = calib.get_plot()
