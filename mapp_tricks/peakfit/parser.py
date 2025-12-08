@@ -277,7 +277,7 @@ def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "
 
         print(f"Summed {len(group)} spectra → {result_file_name}")
 
-def read_peakfit_results_csv(filepath: str) -> PeakFitterResult:
+def read_peakfit_results_csv(filepath: str) -> list[PeakFitterResult]:
     """
     Read peak fitting results from a CSV file and return a PeakFitterResult object.
 
