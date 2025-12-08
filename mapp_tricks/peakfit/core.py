@@ -17,6 +17,7 @@ from scipy.optimize import curve_fit # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 
 from .parser import parse_spectrum_file
+from .models import PeakFitterResult
 
 def linear_func(x, m, b):
     """Linear function: y = mx + b"""
@@ -29,48 +30,6 @@ def gaussian_func(x, amp, center, sigma):
 def linear_gaussian_model(x, m, b, amp, center, sigma):
     """Combined linear and Gaussian model."""
     return linear_func(x, m, b) + gaussian_func(x, amp, center, sigma)
-
-class PeakFitterResult:
-    """
-    Class to hold the results of a peak fitting operation.
-    
-    Attributes
-    ----------
-    area : ufloat
-        Area of the fitted peak in counts
-    centroid : ufloat
-        Centroid of the peak in keV
-    amplitude : ufloat
-        Amplitude of the peak in counts
-    sigma : ufloat
-        Standard deviation of the Gaussian fit in keV
-
-    Methods
-    -------
-    __repr__():
-        String representation of the result object.
-    """
-    def __init__(self, area: ufloat, centroid: ufloat,
-                 start_time: datetime, real_time: float, live_time: float,
-                 amplitude: ufloat, sigma: ufloat, figure: Optional[plt.Figure] = None):
-        self.area = area
-        self.centroid = centroid
-        self.start_time = start_time
-        self.real_time = real_time
-        self.live_time = live_time
-        self.amplitude = amplitude
-        self.sigma = sigma
-        self.figure = figure
-
-
-    def __repr__(self):
-        return (f"PeakFitterResult(area={self.area:.2f}, "
-                f"centroid={self.centroid:.2f}, "
-                f"amplitude={self.amplitude:.2f}, "
-                f"sigma={self.sigma:.2f}, "
-                f"start_time={self.start_time}, "
-                f"real_time={self.real_time:.2f}, "
-                f"live_time={self.live_time:.2f})")
 
 class PeakFitter:
     """

@@ -9,7 +9,10 @@ import os
 import glob
 import re
 from datetime import datetime
-import pandas as pd
+import pandas as pd # type: ignore
+from uncertainties import ufloat # type: ignore
+
+from .models import PeakFitterResult
 
 
 def parse_spectrum_file(filepath):
@@ -224,8 +227,6 @@ def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, resu
     result_file_path = os.path.join(folder_path, result_file_name)
     return sum_spectras(paths_to_txt, result_file_path)
 
-
-
 def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "sum"):
     """
     Groups spectra files in a folder and sums them up in numeric order.
@@ -275,3 +276,48 @@ def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "
         )
 
         print(f"Summed {len(group)} spectra → {result_file_name}")
+
+def read_peakfit_results_csv(filepath: str) -> PeakFitterResult:
+    """
+    Read peak fitting results from a CSV file and return a PeakFitterResult object.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to the CSV file containing peak fitting results
+
+    Returns
+    -------
+    PeakFitterResult
+        Object containing the peak fitting results
+    """
+    df = pd.read_csv(filepath)
+
+    results:list[PeakFitterResult] = []
+    try:
+        for index, row in df.iterrows():
+            # header: area,area_err,centroid,centroid_err,amplitude,amplitude_err,sigma,sigma_err,energy_range,slope,slope_err,intercept,intercept_err,filename,start_time,real_time,live_time
+
+            area = ufloat(row['area'], row['area_err'])
+            centroid = ufloat(row['centroid'], row['centroid_err'])
+            amplitude = ufloat(row['amplitude'], row['amplitude_err'])
+            sigma = ufloat(row['sigma'], row['sigma_err'])
+            start_time = datetime.fromisoformat(row['start_time'])
+            real_time = float(row['real_time'])
+            live_time = float(row['live_time'])
+
+            result = PeakFitterResult(
+                area=area,
+                centroid=centroid,
+                start_time=start_time,
+                real_time=real_time,
+                live_time=live_time,
+                amplitude=amplitude,
+                sigma=sigma,
+                figure=None
+            )
+            results.append(result)
+    except Exception as e:
+        print(f"Error reading peakfit results from {filepath}: {e}")
+
+    return results
