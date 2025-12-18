@@ -40,7 +40,6 @@ class PeakFitter:
     """
     
     def __init__(self):
-        """Initialize the PeakFitter with Gaussian and Linear models."""
         pass
     
     def fit_peak(self, df: pd.DataFrame, energy_range: Tuple[float, float]) -> Dict:
@@ -134,12 +133,61 @@ class PeakFitter:
         )
 
         return res[0]
+    
+    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: Optional[str] = None,) -> List[PeakFitterResult]:
+        """
+        Process a single spectrum file for multiple peaks.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the spectrum file
+        energy_ranges : list of tuple
+            List of (min_energy, max_energy) for the fitting ranges
+
+        Returns
+        -------
+        list of PeakFitterResult
+            List containing fit results for each peak
+        """
+
+        # make sure file and parent folder exist
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File does not exist: {filepath}")
+        parent_folder = os.path.dirname(filepath)
+        if not os.path.exists(parent_folder):
+            raise FileNotFoundError(f"Parent folder does not exist: {parent_folder}")
+        
+        file_name = os.path.basename(filepath)
+
+        if output_dir is None:
+            output_dir = os.path.join(parent_folder, "results")
+
+        all_results = []
+
+        for energy_range in tqdm(energy_ranges, desc="peakfit - processing energy ranges"):
+            res = self.process_folder(
+                folder_path=parent_folder,
+                energy_range=energy_range,
+                output_dir=output_dir,
+                save_plots=True,
+                save_plotly=False,
+                file_pattern=file_name,
+                process_multiple_peaks=True
+            )
+            all_results.append(res[0])
+
+        # store a csv summary of all peaks
+
+
+        return all_results
 
     def process_folder(self, folder_path: str, energy_range: Tuple[float, float],
                       output_dir: Optional[str] = None,
                       save_plots: bool = True,
                       save_plotly: bool = False,
-                      file_pattern: str = "*.txt") -> list[PeakFitterResult]:
+                      file_pattern: str = "*.txt",
+                      process_multiple_peaks:bool = False) -> list[PeakFitterResult]:
         """
         Process all spectrum files in a folder.
         
@@ -177,7 +225,8 @@ class PeakFitter:
                 return basename
         files = sorted(files, key=sort_key)
 
-        print(f"peakfit - found {len(files)} files to process.")
+        if not process_multiple_peaks:
+            print(f"peakfit - found {len(files)} files to process.")
         
         if not files:
             raise ValueError(f"No files found matching pattern '{file_pattern}' in {folder_path}")
@@ -195,7 +244,7 @@ class PeakFitter:
         return_results = []
         
         # Process files
-        for file in tqdm(files, desc="peakfit - processing files"):
+        for file in tqdm(files, desc="peakfit - processing files", disable=process_multiple_peaks):
             try:
                 # Parse file
                 df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file)
@@ -212,10 +261,10 @@ class PeakFitter:
 
                 
                 # Save plots
+                plots_base_filename = f"{os.path.basename(file)}_{int(res["centroid"])}keV"
                 fig = None
                 if save_plots:
-                    fig = plot_matplotlib(res, save_path=os.path.join(plots_dir, 
-                                                              f"{os.path.basename(file)}.pdf"))
+                    fig = plot_matplotlib(res, save_path=os.path.join(plots_dir, f"{plots_base_filename}.pdf"))
                 return_results.append(PeakFitterResult(
                     area=ufloat(res["area"], res["area_err"]),
                     centroid=ufloat(res["centroid"], res["centroid_err"]),
@@ -228,8 +277,7 @@ class PeakFitter:
                 ))
                 
                 if save_plotly:
-                    plot_plotly(res, df, save_path=os.path.join(plots_dir, 
-                                                              f"{os.path.basename(file)}.html"))
+                    plot_plotly(res, df, save_path=os.path.join(plots_dir, f"{plots_base_filename}.html"))
                 
             except Exception as e:
                 print(f"Error processing {file}: {e}")
@@ -243,8 +291,8 @@ class PeakFitter:
                                      errors='ignore')
         
         os.makedirs(output_dir, exist_ok=True)
-        csv_results.to_csv(os.path.join(output_dir, "peakfit_results.csv"), index=False)
-
-        print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/peakfit_results.csv")
+        if not process_multiple_peaks:
+            csv_results.to_csv(os.path.join(output_dir, "peakfit_results.csv"), index=False)
+            print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/peakfit_results.csv")
         
         return return_results
