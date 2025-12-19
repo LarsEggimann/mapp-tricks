@@ -7,15 +7,10 @@ for visualizing peak fits and spectra.
 
 import os
 from typing import Optional, Tuple
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-try:
-    import plotly.graph_objects as go
-    PLOTLY_AVAILABLE = True
-except ImportError:
-    PLOTLY_AVAILABLE = False
+import numpy as np # type: ignore
+import pandas as pd # type: ignore
+import matplotlib.pyplot as plt # type: ignore
+import plotly.graph_objects as go # type: ignore
 
 
 def linear_func(x: np.ndarray, m: float, b: float):
@@ -72,7 +67,7 @@ def plot_matplotlib(res: dict, save_path: Optional[str] = None,
     
     # Labels and formatting
     filename = os.path.basename(res.get('filename', 'Unknown'))
-    plt.title(f"Peak fit for: {filename}")
+    plt.title(f"Peak fit for: {filename} - {int(res['centroid'])} keV")
     plt.xlabel("Energy (keV)")
     plt.ylabel("Counts")
     plt.yscale('log')
@@ -109,8 +104,6 @@ def plot_plotly(res: dict, df: pd.DataFrame,
     save_path : str, optional
         Path to save HTML file. If None, shows the plot
     """
-    if not PLOTLY_AVAILABLE:
-        raise ImportError("Plotly is not available. Install with: pip install plotly")
     
     # Create the main figure
     fig = go.Figure()
