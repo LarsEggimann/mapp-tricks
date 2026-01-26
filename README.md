@@ -1,5 +1,7 @@
 # mapp-tricks package
-Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern. It has several modules, some of which are explained below. The other modules I figured are too specific and probably not useful for others, but feel free to explore them.
+Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern. It has several modules, *some* of which are explained below. The other modules I figured are too specific and probably not useful for others, but feel free to explore them.
+
+Please note that the documentation is by no means complete - you will find much undocumented functions, variables and classes in the code. If you have questions feel free to contact me. I only documented the parts that were used by colleagues or students.
 
 
 Use at your own risk!
@@ -176,12 +178,16 @@ config = fa.generate_default_config(
 fa.save_config(config, fa.folder / 'config.json')
 ```
 
-Now run the analysis:
+Be careful on to not rerun the config generation and saving part after editing the config file manually, otherwise your changes will be overwritten!
+
+Comment out or otherwise avoid re-running the config generation part and add the snippet below to run the analysis:
 ```python
-fa.load_config(fa.folder / 'config.json')
+config = fa.load_config(fa.folder / 'config.json')
 fa.process_all(config)
 ```
 This will create a subfolder `results/` in the folder where the images are located. In this folder you will find dose maps and profiles for each film analyzed and also a summary file `summary.csv` that contains the mean dose and standard deviation and other information in the ROI for each film.
+
+If you only need to analyze a single film you will need to put it in its own folder (this is just how it is implemented currently) and do the same steps as above.
 
 Now use the generated html plots to optimize the config file and re-run the analysis until satisfied. Make sure to not overwrite the config file with the generated one each time you run the analysis -> remove the saving and generating part after the first time.
 
