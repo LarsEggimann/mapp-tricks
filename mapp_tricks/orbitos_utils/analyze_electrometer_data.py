@@ -6,6 +6,8 @@ from datetime import datetime
 from uncertainties import ufloat # type: ignore
 import uncertainties
 
+from ..plotting.plotly_styler import apply_my_plotly_style
+
 class BeamData:
     start_of_beam: datetime
     end_of_beam: datetime
@@ -46,8 +48,8 @@ class ElectrometerDataAnalyzer:
         # find beam start and end times (current above threshold)
         beam_mask = self.df['current'] > self.beam_threshold
 
-        # set all values to 0 for which there is no beam
-        self.df.loc[~beam_mask, 'current'] = 0
+        # # set all values to 0 for which there is no beam
+        # self.df.loc[~beam_mask, 'current'] = 0
 
         beam_indices = self.df.index[beam_mask]
         if len(beam_indices) > 0:
@@ -85,7 +87,7 @@ class ElectrometerDataAnalyzer:
                 x=beam_data['datetime'],
                 y=beam_data['current'],
                 mode='lines',
-                name='Beam On (>1e-10 A)',
+                name=f'Beam On >{self.beam_threshold:.1e} A',
                 line=dict(color='red', width=2)
             ))
 
@@ -102,18 +104,18 @@ class ElectrometerDataAnalyzer:
             title='Current vs Time',
             xaxis_title='Time [datetime]',
             yaxis_title='Current [A]',
-            yaxis_type='log',  # Log scale for current
+            # yaxis_type='log',  # Log scale for current
             showlegend=True,
             width=1000,
             height=600
         )
 
-        # apply transparent background
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='black')
-        )
+        # # apply transparent background
+        # fig.update_layout(
+        #     plot_bgcolor='rgba(0,0,0,0)',
+        #     paper_bgcolor='rgba(0,0,0,0)',
+        #     font=dict(color='black')
+        # )
 
         # grey grid lines
         fig.update_xaxes(showgrid=True, gridcolor='lightgray')
@@ -129,6 +131,8 @@ class ElectrometerDataAnalyzer:
             font=dict(size=12, color='black'),
             align='left'
         )
+
+        fig = apply_my_plotly_style(fig)
 
         self.plot = fig
         self.beam_data = BeamData(
