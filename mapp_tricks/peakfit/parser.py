@@ -227,7 +227,7 @@ def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, resu
     result_file_path = os.path.join(folder_path, result_file_name)
     return sum_spectras(paths_to_txt, result_file_path)
 
-def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "sum"):
+def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "sum", skip_first_n: int = 0):
     """
     Groups spectra files in a folder and sums them up in numeric order.
 
@@ -235,7 +235,12 @@ def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "
         folder_path (str): Path to the folder containing spectra files.
         group_size (int): Number of spectra to sum in one group. Default = 4.
         prefix (str): Subfolder prefix for result files. Default = "sum".
+        skip_first_n (int): Number of files to skip from the beginning. Default = 0.
     """
+    # resolve absolute folder path
+    folder_path = os.path.abspath(folder_path)
+
+
     # find all spectra files (*.txt)
     files = glob.glob(os.path.join(folder_path, "*.txt"))
 
@@ -250,7 +255,11 @@ def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "
 
     files = sorted(files, key=extract_num)
 
+    # skip first n files
+    files = files[skip_first_n:]
+
     # results folder
+
     result_dir = os.path.join(folder_path, prefix)
     os.makedirs(result_dir, exist_ok=True)
 

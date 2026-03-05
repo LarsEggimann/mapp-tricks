@@ -62,12 +62,14 @@ class PeakFitter:
         dict
             Dictionary containing fit results and parameters
         """
+        # assert that energy_range is a tuple of two floats
+        assert isinstance(energy_range, tuple) and len(energy_range) == 2, f"energy_range must be a tuple of two values, got {energy_range}"
+        assert all(isinstance(e, (int, float)) for e in energy_range), f"energy_range values must be numbers, got {energy_range}, types: {[type(e) for e in energy_range]}"
         # Filter data to energy range
         df_peak = df[(df['energy'] >= energy_range[0]) & (df['energy'] <= energy_range[1])]
         
         x = df_peak['energy'].values
         y = df_peak['counts'].values
-        
 
         # x and y are your data arrays
         popt, pcov = curve_fit(linear_gaussian_model, x, y, p0=[0, 0, np.sum(y), x[np.argmax(y)], 0.9])
@@ -131,6 +133,9 @@ class PeakFitter:
             save_plotly=False,
             file_pattern=file_name
         )
+
+        # assert that we got exactly one result back wit assert
+        assert len(res) == 1, f"Expected exactly one result from processing file {filepath}, but got {len(res)} results."
 
         return res[0]
     
@@ -248,7 +253,6 @@ class PeakFitter:
             try:
                 # Parse file
                 df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file)
-
                 # Fit peak
                 res = self.fit_peak(df, energy_range)
                 res["filename"] = file

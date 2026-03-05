@@ -183,11 +183,12 @@ class ElectrometerDataAnalyzer:
     
         data = self.df[(self.df['datetime'] >= start_of_beam) & (self.df['datetime'] <= end_of_beam)]
 
-        time = data['timestamp'].values
-        current = data['current'].values
+        time = data['timestamp'].to_numpy(dtype=float, copy=True)
+        current = data['current'].to_numpy(copy=True)
 
         # start time at 0
-        time -= time[0]
+        if time.size > 0:
+            time = time - time[0]
 
         # compute the integrated correction factor
         def compute(t, c):
