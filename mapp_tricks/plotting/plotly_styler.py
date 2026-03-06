@@ -1,49 +1,70 @@
 import plotly.graph_objects as go  # type: ignore
+import plotly.io as pio # type: ignore
+from copy import deepcopy
+
+base = pio.templates["seaborn"]
+my_plotly_theme = deepcopy(base)
+
+grid_color = '#D0D0D0'
+line_color = "#000000"
+text_color = "#000000"
+bg_color = "#FFFFFF"
+
+my_plotly_theme.layout.update(
+
+    paper_bgcolor=bg_color,
+    plot_bgcolor=bg_color,
+
+    margin=dict(l=20, r=20, t=50, b=20),
+    font=dict(
+        family="STIX Two",
+        size=18,
+        color=text_color
+    ),
+    xaxis=dict(
+        zeroline=False,
+        showline=True,
+        linewidth=1,
+        linecolor=line_color,
+
+        ticks="inside",
+        tickwidth=2,
+        ticklen=5,
+
+        showgrid=True,
+        gridcolor=grid_color,
+        gridwidth=1,
+    ),
+    yaxis=dict(
+        zeroline=False,
+        showline=True,
+        linewidth=1,
+        linecolor=line_color,
+
+        ticks="inside",
+        tickwidth=2,
+        ticklen=5,
+
+        showgrid=True,
+        gridcolor=grid_color,
+        gridwidth=1,
+    ),
+)
+
+pio.templates["my_plotly_theme"] = my_plotly_theme
+pio.templates.default = "my_plotly_theme"
 
 def _default_plotly_style(fig: go.Figure) -> go.Figure:
-    fig.update_layout(
-        xaxis=dict(
-            zeroline=False,
-        ),
-        yaxis=dict(
-            zeroline=False,
-        ),
-        margin=dict(l=20, r=20, t=60, b=70),
-        template="plotly_white",
-        font=dict(
-        family="Times New Roman",
-            size=18,
-            color="black"
-        ),
-    )
 
-    # gridcolor = "gray"
+    # style errorbars
+    for trace in fig.data:
+        if hasattr(trace, "error_x") and trace.error_x:
+            trace.error_x.thickness = 1
+            trace.error_x.width = 4
 
-    fig.update_xaxes(
-        showline=True,
-        linewidth=1,
-        linecolor="black",
-        # mirror=True,
-        ticks="inside",
-        tickwidth=1,
-        ticklen=5,
-
-        # gridcolor=gridcolor,
-        # gridwidth=0.1,
-    )
-
-    fig.update_yaxes(
-        showline=True,
-        linewidth=1,
-        linecolor="black",
-        # mirror=True,
-        ticks="inside",
-        tickwidth=1,
-        ticklen=5,
-
-        # gridcolor=gridcolor,
-        # gridwidth=0.1,
-    )
+        if hasattr(trace, "error_y") and trace.error_y:
+            trace.error_y.thickness = 1
+            trace.error_y.width = 4
 
     return fig
 

@@ -229,8 +229,8 @@ class ElectrometerDataAnalyzer:
                     side='right'
                 ),
                 legend_title='Legend',
-                template='plotly_white'
             )
+            fig = apply_my_plotly_style(fig)
             fig.show()
 
         res,_,_ = compute(time, current)
