@@ -15,10 +15,12 @@ my_plotly_theme.layout.update(
     paper_bgcolor=bg_color,
     plot_bgcolor=bg_color,
 
-    margin=dict(l=20, r=20, t=50, b=20),
+    margin=dict(l=0, r=0, t=50, b=80),
+    width=850,
+    height=450,
     font=dict(
         family="STIX Two",
-        size=18,
+        size=20,
         color=text_color
     ),
     xaxis=dict(
@@ -53,6 +55,7 @@ my_plotly_theme.layout.update(
 
 pio.templates["my_plotly_theme"] = my_plotly_theme
 pio.templates.default = "my_plotly_theme"
+colors = pio.templates[pio.templates.default].layout.colorway
 
 def _default_plotly_style(fig: go.Figure) -> go.Figure:
 
@@ -61,10 +64,12 @@ def _default_plotly_style(fig: go.Figure) -> go.Figure:
         if hasattr(trace, "error_x") and trace.error_x:
             trace.error_x.thickness = 1
             trace.error_x.width = 4
+            trace.error_x.width = 0 # set width to 0 to remove end caps
 
         if hasattr(trace, "error_y") and trace.error_y:
             trace.error_y.thickness = 1
             trace.error_y.width = 4
+            trace.error_y.width = 0 # set width to 0 to remove end caps
 
     return fig
 
@@ -76,5 +81,21 @@ def apply_my_plotly_style_with_transparent_background(fig: go.Figure) -> go.Figu
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
+    )
+    return fig
+
+def float_legend(fig: go.Figure, x: float = 0.95, y: float = 0.98) -> go.Figure:
+    fig.update_layout(
+        legend=dict(
+            x=x,
+            xanchor='right',
+            y=y,
+            yanchor='top',
+            orientation='v',
+
+            # bgcolor='rgba(255,255,255,0.5)',
+            # bordercolor='rgba(0,0,0,0.5)',
+            # borderwidth=1
+        )
     )
     return fig

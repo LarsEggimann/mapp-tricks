@@ -4,6 +4,7 @@ import numpy as np # type: ignore
 import plotly.graph_objects as go  # type: ignore
 from datetime import datetime
 from uncertainties import ufloat # type: ignore
+from uncertainties import unumpy as unp # type: ignore
 import uncertainties
 
 from ..plotting.plotly_styler import apply_my_plotly_style
@@ -172,8 +173,7 @@ class ElectrometerDataAnalyzer:
             raise ValueError("Beam data not analyzed yet. Call analyze_beam_data() first.")
 
         # since the time axis in the beam file is in timestamp we can integrate directly
-        if isinstance(half_life, uncertainties.core.Variable) or isinstance(half_life, uncertainties.UFloat):
-            half_life = half_life.n
+        half_life = unp.nominal_values(half_life)
         lambda_ = np.log(2) / half_life
 
         if start_of_beam is None:

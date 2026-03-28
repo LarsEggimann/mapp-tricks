@@ -12,6 +12,7 @@ from typing import Dict, List, Tuple, Optional, Union
 import numpy as np
 import pandas as pd # type: ignore
 from uncertainties import ufloat # type: ignore
+from uncertainties import unumpy as unp # type: ignore
 from tqdm.auto import tqdm # type: ignore
 from scipy.optimize import curve_fit # type: ignore
 import matplotlib.pyplot as plt # type: ignore
@@ -296,7 +297,9 @@ class PeakFitter:
         
         os.makedirs(output_dir, exist_ok=True)
         if not process_multiple_peaks:
-            csv_results.to_csv(os.path.join(output_dir, "peakfit_results.csv"), index=False)
-            print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/peakfit_results.csv")
+            mean_float = unp.nominal_values(results_df.centroid.mean())
+            file_name = f'{int(mean_float)}keV_peakfit_results.csv'
+            csv_results.to_csv(os.path.join(output_dir, file_name), index=False)
+            print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/{file_name}")
         
         return return_results
