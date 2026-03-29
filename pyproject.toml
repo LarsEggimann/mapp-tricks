@@ -22,3 +22,7 @@ dependencies = [
     "plotly",
     "tqdm",
 ]
+
+[project.scripts]
+fluka-run = "mapp_tricks.fluka_utils.fluka_run:main"
+fluka-merge = "mapp_tricks.fluka_utils.fluka_merge:main"

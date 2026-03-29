@@ -273,7 +273,7 @@ class FlukaMerger:
 
         if self.verbose:
             print(
-                f"Merging {len(source_files)} file(s) for {estimator.name} unit {unit} -> {output_file.name}"
+                f"Merging {len(source_files)} files for {estimator.name} unit {unit} -> {output_file.name}"
             )
 
         try:
