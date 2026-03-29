@@ -195,6 +195,8 @@ def fluka_run(
     logs_dir = run_dir / "logs"
     logs_dir.mkdir(exist_ok=True)
 
+    processes: list[tuple[int, subprocess.Popen[bytes], Path]] = []
+
     for i, inp_file in enumerate(inp_files):
         cmd = [*cmd_base, "-N0", f"-M{number_cycles}", inp_file.stem]
         log_file = logs_dir / f"{inp_file.stem}.log"
@@ -210,10 +212,29 @@ def fluka_run(
             print(f"Error launching thread {i}: {e}")
             return 1
 
+        processes.append((i, p, log_file))
         print(f"Launched thread {i} (pid={p.pid}); stdout|stderr -> {log_file.name}")
 
-    # if we get here, we assume FLUKA is running as requested
-    return 0
+    # block until all launched FLUKA processes are finished.
+    exit_status = 0
+    try:
+        for i, process, log_file in processes:
+            return_code = process.wait()
+            if return_code != 0:
+                print(
+                    f"Thread {i} failed with exit code {return_code}; check log '{log_file.name}'."
+                )
+                exit_status = 1
+            elif verbose:
+                print(f"Thread {i} finished successfully.")
+    except KeyboardInterrupt:
+        print(" -> Interrupted while waiting for FLUKA to finish. Terminating running threads ...")
+        for _, process, _ in processes:
+            if process.poll() is None:
+                process.terminate()
+        return 130
+
+    return exit_status
 
 
 def main() -> int:
