@@ -46,3 +46,17 @@ def store_csv(df: pd.DataFrame, filename: str) -> None:
                 ufloat_val = row[col]
                 df.at[index, col] = f"{ufloat_val.nominal_value}+/-{ufloat_val.std_dev}"
     df.to_csv(filename, index=False)
+
+
+def convert_color_hex_to_rgba(hex_color: str) -> str:
+    hex_str = hex_color.replace('#', '')
+    if len(hex_str) != 6:
+        hex_str = hex_str + '0'
+    r = int(hex_str[0:2], 16)
+    g = int(hex_str[2:4], 16)
+    b = int(hex_str[4:6], 16)
+    a = 1
+    if len(hex_str) > 6:
+        alpha = float(int(hex_str[6:10], 16) / 255 * 1)
+        a = round(alpha, 2)
+    return 'rgba({},{},{},{})'.format(r, g, b, a)

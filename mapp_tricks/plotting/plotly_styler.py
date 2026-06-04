@@ -2,24 +2,28 @@ import plotly.graph_objects as go  # type: ignore
 import plotly.io as pio # type: ignore
 from copy import deepcopy
 
+from ..utils import convert_color_hex_to_rgba
+
 base = pio.templates["seaborn"]
 my_plotly_theme = deepcopy(base)
 
-grid_color = '#D0D0D0'
+grid_color = "#F5F5F5"
 line_color = "#000000"
 text_color = "#000000"
 bg_color = "#FFFFFF"
+
+error_bar_color = convert_color_hex_to_rgba("#3f3f3f90")
 
 my_plotly_theme.layout.update(
 
     paper_bgcolor=bg_color,
     plot_bgcolor=bg_color,
 
-    margin=dict(l=0, r=0, t=50, b=80),
+    margin=dict(l=0, r=0, t=50, b=80), 
     width=850,
     height=450,
     font=dict(
-        family="STIX Two",
+        family="Computer Modern",
         size=20,
         color=text_color
     ),
@@ -65,11 +69,18 @@ def _default_plotly_style(fig: go.Figure) -> go.Figure:
             trace.error_x.thickness = 1
             trace.error_x.width = 4
             trace.error_x.width = 0 # set width to 0 to remove end caps
+            trace.error_x.color = error_bar_color
 
         if hasattr(trace, "error_y") and trace.error_y:
             trace.error_y.thickness = 1
             trace.error_y.width = 4
             trace.error_y.width = 0 # set width to 0 to remove end caps
+            trace.error_y.color = error_bar_color
+
+    # increase marker size for scatter plots
+    for trace in fig.data:
+        if isinstance(trace, go.Scatter):
+            trace.marker.size = 8
 
     return fig
 
