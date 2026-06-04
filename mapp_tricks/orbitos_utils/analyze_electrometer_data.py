@@ -24,6 +24,8 @@ class BeamData:
         self.integrated_charge = integrated_charge
         self.plot = plot
 
+
+
     def __repr__(self):
         return (f"BeamData(start_of_beam={self.start_of_beam}, end_of_beam={self.end_of_beam}, "
                 f"t_irradiation={self.t_irradiation} seconds, "
@@ -44,6 +46,10 @@ class ElectrometerDataAnalyzer:
         # convert timestamps to datetime
         self.df['datetime'] = [datetime.fromtimestamp(ts) for ts in self.df['timestamp']]
 
+        # debug variables
+        self._beam_start_idx = None
+        self._beam_end_idx = None
+
     def analyze_beam_data(self, save_plot=True) -> BeamData:
 
         # find beam start and end times (current above threshold)
@@ -54,10 +60,10 @@ class ElectrometerDataAnalyzer:
 
         beam_indices = self.df.index[beam_mask]
         if len(beam_indices) > 0:
-            beam_start_idx = beam_indices[0]
-            beam_end_idx = beam_indices[-1]
-            self.beam_start_time = self.df.loc[beam_start_idx, 'datetime']
-            self.beam_end_time = self.df.loc[beam_end_idx, 'datetime']
+            self._beam_start_idx = beam_indices[0]
+            self._beam_end_idx = beam_indices[-1]
+            self.beam_start_time = self.df.loc[self._beam_start_idx, 'datetime']
+            self.beam_end_time = self.df.loc[self._beam_end_idx, 'datetime']
         else:
             print(f"No beam detected (no current above {self.beam_threshold:.1e} A)")
             self.beam_start_time = None
