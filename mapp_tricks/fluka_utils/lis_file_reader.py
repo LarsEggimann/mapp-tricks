@@ -66,14 +66,14 @@ def _parse_data_line_where_integrated_over_solid_angle(line: str) -> tuple[float
 		return None
 
 
-def read_usrbdx_tab_lis(file_path: Path | str, verbose: bool = False) -> list[DetectorDistribution]:
+def read_usrbdx_tab_lis(file_path: Path | str, verbose: bool = False) -> dict[str, DetectorDistribution]:
 	"""
 	Read a FLUKA USRBDX tab.lis file and return distributions per detector.
 	Args:
 		file_path (Path | str): path to the tab.lis file
 		verbose (bool): whether to print verbose output
 	Returns:
-		list[DetectorDistribution]: list of detector distributions found in the file
+		dict[str, DetectorDistribution]: dictionary mapping detector names to their distributions
 
 	
 	"""
@@ -82,7 +82,7 @@ def read_usrbdx_tab_lis(file_path: Path | str, verbose: bool = False) -> list[De
 	if not path.is_file():
 		raise FileNotFoundError(f"FLUKA tab.lis file not found: {path}")
 
-	detectors: list[DetectorDistribution] = []
+	detectors: dict[str, DetectorDistribution] = {}
 	current: DetectorDistribution | None = None
 	expected_intervals: int | None = None
 
@@ -110,7 +110,7 @@ def read_usrbdx_tab_lis(file_path: Path | str, verbose: bool = False) -> list[De
 					print(f"Found detector \"{current.name}\" with ID \"{current.detector_id}\" expecting \"{expected_intervals}\" bins.")
 				
 				# add the found detector to the list
-				detectors.append(current)
+				detectors[current.name] = current
 
 				# find out start idx and end idx of the data lines
 				data = pd.read_csv(path, skiprows=start_idx-1, nrows=expected_intervals, names=["energy_low", "energy_high", "dphi", "dhpi_percentage_error"], sep=r"\s+")
