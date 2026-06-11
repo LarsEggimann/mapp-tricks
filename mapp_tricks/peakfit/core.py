@@ -103,7 +103,7 @@ class PeakFitter:
             "intercept_err": intercept.s,
         }
     
-    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: Optional[str] = None,) -> PeakFitterResult:
+    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: Optional[str] = None, timezone: Optional[str] = "Europe/Zurich") -> PeakFitterResult:
         """
         Process a single spectrum file.
 
@@ -113,6 +113,10 @@ class PeakFitter:
             Path to the spectrum file
         energy_range : tuple
             (min_energy, max_energy) for the fitting range
+        output_dir : str, optional
+            Directory to save output files
+        timezone : str, optional
+            Timezone for timestamp conversion, default "Europe/Zurich"
 
         Returns
         -------
@@ -132,7 +136,8 @@ class PeakFitter:
             output_dir=output_dir,
             save_plots=True,
             save_plotly=False,
-            file_pattern=file_name
+            file_pattern=file_name,
+            timezone=timezone
         )
 
         # assert that we got exactly one result back wit assert
@@ -140,7 +145,7 @@ class PeakFitter:
 
         return res[0]
     
-    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: Optional[str] = None,) -> List[PeakFitterResult]:
+    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: Optional[str] = None, timezone: Optional[str] = "Europe/Zurich") -> List[PeakFitterResult]:
         """
         Process a single spectrum file for multiple peaks.
 
@@ -179,7 +184,8 @@ class PeakFitter:
                 save_plots=True,
                 save_plotly=False,
                 file_pattern=file_name,
-                process_multiple_peaks=True
+                process_multiple_peaks=True,
+                timezone=timezone
             )
             all_results.append(res[0])
 
@@ -193,7 +199,9 @@ class PeakFitter:
                       save_plots: bool = True,
                       save_plotly: bool = False,
                       file_pattern: str = "*.txt",
-                      process_multiple_peaks:bool = False) -> list[PeakFitterResult]:
+                      process_multiple_peaks:bool = False,
+                      timezone: Optional[str] = "Europe/Zurich"
+                      ) -> list[PeakFitterResult]:
         """
         Process all spectrum files in a folder.
         
@@ -211,7 +219,11 @@ class PeakFitter:
             Whether to save interactive plotly plots
         file_pattern : str, default "*.txt"
             File pattern to match
-            
+        process_multiple_peaks : bool, default False
+            Whether to process multiple peaks in each file
+        timezone : str, optional
+            Timezone for timestamp conversion, default "Europe/Zurich"
+
         Returns
         -------
         pd.DataFrame
@@ -253,7 +265,7 @@ class PeakFitter:
         for file in tqdm(files, desc="peakfit - processing files", disable=process_multiple_peaks):
             try:
                 # Parse file
-                df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file)
+                df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file, timezone=timezone)
                 # Fit peak
                 res = self.fit_peak(df, energy_range)
                 res["filename"] = file

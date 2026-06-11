@@ -39,8 +39,19 @@ def do_cross_section_analysis(
 
     ea = ElectrometerDataAnalyzer(os.path.join(df_row.data_source_folder, df_row.orbitos_file))
     electrometer_data = ea.analyze_beam_data()
-    
 
+    print("timezone info of electrometer data:", electrometer_data.start_of_beam.tzinfo)
+    print("timezone info of spectra data:", spectra_data.start_time.tzinfo)
+
+    # Get the UTC offset for both datetimes
+    offset_electrometer = electrometer_data.start_of_beam.utcoffset()
+    offset_spectra = spectra_data.start_time.utcoffset()
+
+    # Assert that the offsets are the same
+    assert offset_electrometer == offset_spectra, (
+        f"Timezone offset mismatch! Electrometer: {offset_electrometer}, "
+        f"Spectra: {offset_spectra}. Please check timezone settings."
+    )
     cooling_time = (spectra_data.start_time - electrometer_data.end_of_beam).total_seconds()
 
     calibration = HPGeCalibration(level=df_row.spectra_level, with_aluminum_foil=df_row.spectra_with_aluminum_foil)

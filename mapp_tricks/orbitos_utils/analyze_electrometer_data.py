@@ -33,7 +33,7 @@ class BeamData:
 
 
 class ElectrometerDataAnalyzer:
-    def __init__(self, path_to_csv: str, beam_threshold: float = 400e-12):
+    def __init__(self, path_to_csv: str, beam_threshold: float = 400e-12, timezone:str = 'local'):
         self.path_to_csv = path_to_csv
         self.beam_threshold = beam_threshold
         self.plot = None
@@ -43,8 +43,10 @@ class ElectrometerDataAnalyzer:
         self.df = pd.read_csv(self.path_to_csv)
         if self.df is None or self.df.empty:
             raise ValueError(f"Failed to read data from {self.path_to_csv} or file is empty.")
-        # convert timestamps to datetime
-        self.df['datetime'] = [datetime.fromtimestamp(ts) for ts in self.df['timestamp']]
+        # convert timestamps to datetime, careful here we create objects in local timezone, be careful when comparing with other datetimes
+        if timezone == 'local':
+            timezone = datetime.now().astimezone().tzinfo
+        self.df['datetime'] = [datetime.fromtimestamp(ts, tz=timezone) for ts in self.df['timestamp']]
 
         # debug variables
         self._beam_start_idx = None

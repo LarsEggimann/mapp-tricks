@@ -11,11 +11,12 @@ import re
 from datetime import datetime
 import pandas as pd # type: ignore
 from uncertainties import ufloat # type: ignore
+from zoneinfo import ZoneInfo
 
 from .models import PeakFitterResult
 
 
-def parse_spectrum_file(filepath):
+def parse_spectrum_file(filepath, timezone: str = "Europe/Zurich"):
     """
     Parse a spectrum file to extract energy calibration and data.
     
@@ -23,7 +24,9 @@ def parse_spectrum_file(filepath):
     ----------
     filepath : str
         Path to the spectrum file
-        
+    timezone : str
+        Timezone for the start time (default: "Europe/Zurich")
+
     Returns
     -------
     tuple
@@ -36,6 +39,8 @@ def parse_spectrum_file(filepath):
     with open(filepath) as f:
         lines = f.readlines()
 
+    tz_info = ZoneInfo(timezone)
+
     # Extract Start Time: # Start time:    2025-05-07, 14:07:49
     start_time = None
     for line in lines:
@@ -43,10 +48,12 @@ def parse_spectrum_file(filepath):
         if line.startswith("# Start time:"):
             start_time = ':'.join(line.split(":")[1:]).strip()
             start_time = datetime.strptime(start_time, "%Y-%m-%d, %H:%M:%S")
+            start_time = start_time.replace(tzinfo=tz_info)
             break
         # StartTime: 2025-08-15T15:20:33.988032
         if line.startswith("StartTime:"):
             start_time = datetime.fromisoformat(':'.join(line.split(":")[1:]).strip())
+            start_time = start_time.replace(tzinfo=tz_info)
             break
 
     # Extract real_time
