@@ -40,10 +40,7 @@ def do_cross_section_analysis(
     ea = ElectrometerDataAnalyzer(os.path.join(df_row.data_source_folder, df_row.orbitos_file))
     electrometer_data = ea.analyze_beam_data()
 
-    print("timezone info of electrometer data:", electrometer_data.start_of_beam.tzinfo)
-    print("timezone info of spectra data:", spectra_data.start_time.tzinfo)
-
-    # Get the UTC offset for both datetimes
+    # get the UTC offset for both datetimes
     offset_electrometer = electrometer_data.start_of_beam.utcoffset()
     offset_spectra = spectra_data.start_time.utcoffset()
 

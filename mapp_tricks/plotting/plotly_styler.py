@@ -77,10 +77,10 @@ def _default_plotly_style(fig: go.Figure) -> go.Figure:
             trace.error_y.width = 0 # set width to 0 to remove end caps
             trace.error_y.color = error_bar_color
 
-    # increase marker size for scatter plots
-    for trace in fig.data:
-        if isinstance(trace, go.Scatter):
-            trace.marker.size = 8
+    # # increase marker size for scatter plots
+    # for trace in fig.data:
+    #     if isinstance(trace, go.Scatter):
+    #         trace.marker.size = 8
 
     return fig
 
