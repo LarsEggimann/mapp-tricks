@@ -24,11 +24,14 @@ def do_cross_section_analysis(
     df = df.copy()
     df_one_row: pd.DataFrame = df.loc[row_condition]
 
+
     if len(df_one_row) != 1:
         raise ValueError("Expected a single row DataFrame for cross section analysis. Choose a target, and peak?")
 
     row_idx = df_one_row.index[0]   # keep the row index
     df_row = df_one_row.squeeze()      # for convenience in code below
+
+    print(f"\nPerforming cross section analysis for target {df_row.target}")
 
     fitter = PeakFitter()
 
@@ -53,24 +56,30 @@ def do_cross_section_analysis(
 
     calibration = HPGeCalibration(level=df_row.spectra_level, with_aluminum_foil=df_row.spectra_with_aluminum_foil)
 
-    A_EoB = calibration.get_activity_for_peak_at_end_of_beam(
-        peak_area=spectra_data.area,
-        peak_energy=spectra_data.centroid,
-        life_time=spectra_data.live_time,
-        real_time=spectra_data.real_time,
-        cooling_time=cooling_time,
-        branching_ratio=df_row.branching_ratio,
-        half_life=df_row.half_life_s,
-    )
 
-    A_start_of_spectra = calibration.get_activity_for_peak_at_start_of_measurement(
-        peak_area=spectra_data.area,
-        peak_energy=spectra_data.centroid,
-        life_time=spectra_data.live_time,
-        real_time=spectra_data.real_time,
-        branching_ratio=df_row.branching_ratio,
-        half_life=df_row.half_life_s,
-    )
+    # check if the row has a value in Tc99m_bateman_AEoB_Bq colum we use it instead of calculating it
+    if pd.notna(df_row.Tc99m_bateman_AEoB_Bq):
+        print(f"Using Tc99m_bateman_AEoB_Bq value from DataFrame for row {row_idx}: {df_row.Tc99m_bateman_AEoB_Bq}")
+        A_EoB = df_row.Tc99m_bateman_AEoB_Bq  # the value will be ufloat
+    else:
+        A_EoB = calibration.get_activity_for_peak_at_end_of_beam(
+            peak_area=spectra_data.area,
+            peak_energy=spectra_data.centroid,
+            life_time=spectra_data.live_time,
+            real_time=spectra_data.real_time,
+            cooling_time=cooling_time,
+            branching_ratio=df_row.branching_ratio,
+            half_life=df_row.half_life_s,
+        )
+
+    # A_start_of_spectra = calibration.get_activity_for_peak_at_start_of_measurement(
+    #     peak_area=spectra_data.area,
+    #     peak_energy=spectra_data.centroid,
+    #     life_time=spectra_data.live_time,
+    #     real_time=spectra_data.real_time,
+    #     branching_ratio=df_row.branching_ratio,
+    #     half_life=df_row.half_life_s,
+    # )
     
     # cs = get_cross_section(
     #     activity_at_end_of_beam=A_EoB,
@@ -102,7 +111,7 @@ def do_cross_section_analysis(
     # add the results to the DataFrame where the condition applies
     df.loc[row_idx, "cross_section_b"] = cs
     df.loc[row_idx, "activity_at_end_of_beam_Bq"] = A_EoB
-    df.loc[row_idx, "activity_at_start_of_spectra_Bq"] = A_start_of_spectra
+    # df.loc[row_idx, "activity_at_start_of_spectra_Bq"] = A_start_of_spectra
     df.loc[row_idx, "start_of_beam_time"] = electrometer_data.start_of_beam
     df.loc[row_idx, "end_of_beam_time"] = electrometer_data.end_of_beam
     df.loc[row_idx, "irradiation_time_s"] = electrometer_data.t_irradiation

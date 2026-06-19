@@ -60,3 +60,86 @@ def convert_color_hex_to_rgba(hex_color: str) -> str:
         alpha = float(int(hex_str[6:10], 16) / 255 * 1)
         a = round(alpha, 2)
     return 'rgba({},{},{},{})'.format(r, g, b, a)
+
+
+
+
+def parse_srim_data_normalized(file_path):
+    energy_to_mev = {
+        "eV": 1e-6,
+        "keV": 1e-3,
+        "MeV": 1.0,
+        "GeV": 1e3,
+    }
+    length_to_cm = {
+        "A": 1e-8,  # Angstrom to cm
+        "um": 1e-4,  # Micrometer to cm
+        "mm": 1e-1,  # Millimeter to cm
+        "cm": 1.0,  # Centimeter to cm
+        "m": 100.0,  # Meter to cm
+    }
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    table_lines = []
+    in_table = False
+
+    for line in lines:
+        # table starts after the dashed line following the header labels
+        if "--------------" in line and not in_table:
+            in_table = True
+            continue
+        # table ends at the next long footer divider line
+        if "-----------------------------------------------------------" in line:
+            break
+        if in_table:
+            cleaned = line.strip()
+            if cleaned:
+                table_lines.append(cleaned)
+
+    # parse and normalize rows
+    parsed_rows = []
+    for line in table_lines:
+        parts = line.split()
+
+        # extract values and units
+        energy_val, energy_unit = float(parts[0]), parts[1]
+        elec_loss = float(parts[2])
+        nuc_loss = float(parts[3])
+        range_val, range_unit = float(parts[4]), parts[5]
+        long_strag_val, long_strag_unit = float(parts[6]), parts[7]
+        lat_strag_val, lat_strag_unit = float(parts[8]), parts[9]
+
+        # calculate Total dE/dx
+        total_loss = elec_loss + nuc_loss
+
+        # convert everything into standard normalized units (MeV and cm)
+        energy_mev = energy_val * energy_to_mev.get(energy_unit, 1.0)
+        range_cm = range_val * length_to_cm.get(range_unit, 1.0)
+        long_strag_cm = long_strag_val * length_to_cm.get(long_strag_unit, 1.0)
+        lat_strag_cm = lat_strag_val * length_to_cm.get(lat_strag_unit, 1.0)
+
+        parsed_rows.append(
+            [
+                energy_mev,
+                elec_loss,
+                nuc_loss,
+                total_loss,
+                range_cm,
+                long_strag_cm,
+                lat_strag_cm,
+            ]
+        )
+
+    columns = [
+        "Energy_MeV",
+        "dE/dx_Elec",
+        "dE/dx_Nuclear",
+        "dE/dx_Total",
+        "Projected_Range_cm",
+        "Longitudinal_Straggling_cm",
+        "Lateral_Straggling_cm",
+    ]
+
+    return pd.DataFrame(parsed_rows, columns=columns)

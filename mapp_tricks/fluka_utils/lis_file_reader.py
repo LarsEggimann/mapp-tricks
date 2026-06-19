@@ -133,8 +133,8 @@ def read_usrbdx_tab_lis(file_path: Path | str, verbose: bool = False) -> dict[st
 					"energy_low": data.energy_low * 1e3, # convert GeV to MeV
 					"energy_high": data.energy_high * 1e3, # convert GeV to MeV
 					"energy": ((data.energy_low + data.energy_high) / 2) * 1e3, # convert GeV to MeV
-					"phi": phi,
-					"dphi": dphi_ufloat,
+					"phi": phi, # 1/cm^2/primary
+					"dphi": dphi_ufloat, # 1/cm^2/MeV/primary
 				})
 
 				current.integrated_data = df

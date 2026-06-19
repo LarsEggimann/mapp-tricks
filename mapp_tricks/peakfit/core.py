@@ -8,6 +8,7 @@ for fitting Gaussian peaks with linear backgrounds.
 import os
 import glob
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Tuple, Optional, Union
 import numpy as np
 import pandas as pd # type: ignore
@@ -38,10 +39,16 @@ class PeakFitter:
     
     This class provides methods to fit peaks in a specified energy range,
     extract peak parameters, and process multiple files in batch.
+
+    Parameters
+    ----------
+    timezone : ZoneInfo
+        Timezone of the time strings in the spectrum files, default is "Europe/Zurich". This is used for converting strings to datetime objects.
+    
     """
     
-    def __init__(self):
-        pass
+    def __init__(self, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
+        self.timezone: ZoneInfo = timezone
     
     def fit_peak(self, df: pd.DataFrame, energy_range: Tuple[float, float]) -> Dict:
         """
@@ -103,7 +110,7 @@ class PeakFitter:
             "intercept_err": intercept.s,
         }
     
-    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: Optional[str] = None, timezone: Optional[str] = "Europe/Zurich") -> PeakFitterResult:
+    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: Optional[str] = None) -> PeakFitterResult:
         """
         Process a single spectrum file.
 
@@ -115,8 +122,6 @@ class PeakFitter:
             (min_energy, max_energy) for the fitting range
         output_dir : str, optional
             Directory to save output files
-        timezone : str, optional
-            Timezone for timestamp conversion, default "Europe/Zurich"
 
         Returns
         -------
@@ -137,7 +142,6 @@ class PeakFitter:
             save_plots=True,
             save_plotly=False,
             file_pattern=file_name,
-            timezone=timezone
         )
 
         # assert that we got exactly one result back wit assert
@@ -145,7 +149,7 @@ class PeakFitter:
 
         return res[0]
     
-    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: Optional[str] = None, timezone: Optional[str] = "Europe/Zurich") -> List[PeakFitterResult]:
+    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: Optional[str] = None) -> List[PeakFitterResult]:
         """
         Process a single spectrum file for multiple peaks.
 
@@ -185,7 +189,6 @@ class PeakFitter:
                 save_plotly=False,
                 file_pattern=file_name,
                 process_multiple_peaks=True,
-                timezone=timezone
             )
             all_results.append(res[0])
 
@@ -200,7 +203,6 @@ class PeakFitter:
                       save_plotly: bool = False,
                       file_pattern: str = "*.txt",
                       process_multiple_peaks:bool = False,
-                      timezone: Optional[str] = "Europe/Zurich"
                       ) -> list[PeakFitterResult]:
         """
         Process all spectrum files in a folder.
@@ -221,8 +223,6 @@ class PeakFitter:
             File pattern to match
         process_multiple_peaks : bool, default False
             Whether to process multiple peaks in each file
-        timezone : str, optional
-            Timezone for timestamp conversion, default "Europe/Zurich"
 
         Returns
         -------
@@ -233,14 +233,17 @@ class PeakFitter:
         
         # Find files
         files = glob.glob(os.path.join(folder_path, file_pattern))
+        
         # Try to sort files numerically if they follow numeric pattern, otherwise sort alphabetically
         def sort_key(x):
             basename = os.path.basename(x).split('.')[0]
             try:
-                return int(basename)
+                # Return (0, integer) so numeric files are grouped first and sorted by value
+                return (0, int(basename))
             except ValueError:
-                # If not a number, return the string for alphabetical sorting
-                return basename
+                # If not a number, return (1, string) so they are grouped together alphabetically
+                return (1, basename)
+            
         files = sorted(files, key=sort_key)
 
         if not process_multiple_peaks:
@@ -265,7 +268,7 @@ class PeakFitter:
         for file in tqdm(files, desc="peakfit - processing files", disable=process_multiple_peaks):
             try:
                 # Parse file
-                df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file, timezone=timezone)
+                df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file, timezone=self.timezone)
                 # Fit peak
                 res = self.fit_peak(df, energy_range)
                 res["filename"] = file

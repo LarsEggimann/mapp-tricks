@@ -9,6 +9,7 @@ import os
 import glob
 import re
 from datetime import datetime
+from typing import Optional
 import pandas as pd # type: ignore
 from uncertainties import ufloat # type: ignore
 from zoneinfo import ZoneInfo
@@ -16,7 +17,7 @@ from zoneinfo import ZoneInfo
 from .models import PeakFitterResult
 
 
-def parse_spectrum_file(filepath, timezone: str = "Europe/Zurich"):
+def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
     """
     Parse a spectrum file to extract energy calibration and data.
     
@@ -24,7 +25,7 @@ def parse_spectrum_file(filepath, timezone: str = "Europe/Zurich"):
     ----------
     filepath : str
         Path to the spectrum file
-    timezone : str
+    timezone : ZoneInfo, optional
         Timezone for the start time (default: "Europe/Zurich")
 
     Returns
@@ -39,7 +40,7 @@ def parse_spectrum_file(filepath, timezone: str = "Europe/Zurich"):
     with open(filepath) as f:
         lines = f.readlines()
 
-    tz_info = ZoneInfo(timezone)
+    tz_info = timezone
 
     # Extract Start Time: # Start time:    2025-05-07, 14:07:49
     start_time = None

@@ -67,13 +67,13 @@ def _default_plotly_style(fig: go.Figure) -> go.Figure:
     for trace in fig.data:
         if hasattr(trace, "error_x") and trace.error_x:
             trace.error_x.thickness = 1
-            trace.error_x.width = 4
+            # trace.error_x.width = 4
             trace.error_x.width = 0 # set width to 0 to remove end caps
             trace.error_x.color = error_bar_color
 
         if hasattr(trace, "error_y") and trace.error_y:
             trace.error_y.thickness = 1
-            trace.error_y.width = 4
+            # trace.error_y.width = 4
             trace.error_y.width = 0 # set width to 0 to remove end caps
             trace.error_y.color = error_bar_color
 
