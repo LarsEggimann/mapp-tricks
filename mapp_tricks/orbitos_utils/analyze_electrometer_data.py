@@ -1,35 +1,31 @@
 import os
+from attr import dataclass
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
 import plotly.graph_objects as go  # type: ignore
 from datetime import datetime
-from uncertainties import ufloat # type: ignore
+from uncertainties import ufloat, UFloat # type: ignore
 from uncertainties import unumpy as unp # type: ignore
-import uncertainties
 
 from ..plotting.plotly_styler import apply_my_plotly_style
 
+@dataclass
 class BeamData:
     start_of_beam: datetime
     end_of_beam: datetime
-    t_irradiation: float
-    integrated_charge: ufloat
+    t_irradiation: UFloat
+    integrated_charge: UFloat
+    average_current: UFloat
     plot: go.Figure
 
-    def __init__(self, start_of_beam: datetime, end_of_beam: datetime, integrated_charge: ufloat, 
-                 plot: go.Figure):
-        self.start_of_beam: datetime = start_of_beam
-        self.end_of_beam: datetime = end_of_beam
-        self.t_irradiation = (end_of_beam - start_of_beam).total_seconds()
-        self.integrated_charge = integrated_charge
-        self.plot = plot
-
-
+    def __post_init__(self):
+        """Runs automatically right after the generated __init__ finishes."""
+        pass
 
     def __repr__(self):
         return (f"BeamData(start_of_beam={self.start_of_beam}, end_of_beam={self.end_of_beam}, "
                 f"t_irradiation={self.t_irradiation} seconds, "
-                f"integrated_charge={self.integrated_charge})")
+                f"integrated_charge={self.integrated_charge}, average_current={self.average_current})")
 
 
 class ElectrometerDataAnalyzer:
@@ -69,14 +65,53 @@ class ElectrometerDataAnalyzer:
             self.beam_start_time = None
             self.beam_end_time = None
 
+        t_irradiation = (self.beam_end_time - self.beam_start_time).total_seconds()
+        delta_t = self.df['datetime'].diff().dt.total_seconds().mean()
+        t_irradiation = ufloat(t_irradiation, delta_t)  # assume uncertainty in irradiation time is the average delta t between measurements
+
         # calc integrated charge using trapezoidal integration
         if self.beam_start_time is not None and self.beam_end_time is not None:
-            beam_mask = (self.df['datetime'] >= self.beam_start_time) & (self.df['datetime'] <= self.beam_end_time)
-            total_charge = np.trapezoid(self.df['current'][beam_mask], self.df['timestamp'][beam_mask])
-        else:
-            total_charge = 0
+            beam_on_mask = (self.df['datetime'] >= self.beam_start_time) & (self.df['datetime'] <= self.beam_end_time)
+            beam_currents = self.df['current'][beam_on_mask]
+            beam_timestamps = self.df['timestamp'][beam_on_mask]
+            
+            total_charge = np.trapezoid(beam_currents, beam_timestamps)
+            
+            # instrumental baseline noise (1-second window right before beam start)
+            noise_mask = (self.df['datetime'] >= self.beam_start_time - pd.Timedelta(seconds=1)) & (self.df['datetime'] < self.beam_start_time)
+            noise_currents = self.df['current'][noise_mask]
+            
+            # fallback hierarchy if no data points exist in that exact 1-second pre-beam window
+            if len(noise_currents) > 1:
+                sigma_noise = np.std(noise_currents)
+            else:
+                # fallback
+                all_pre_beam = self.df['current'][self.df['datetime'] < self.beam_start_time]
+                if len(all_pre_beam) > 1:
+                    sigma_noise = np.std(all_pre_beam)
+                else:
+                    # fallback more
+                    sigma_noise = np.std(beam_currents)
+            
+            # propagate integrated charge in quadrature
+            N = len(beam_currents)
+            if N > 0 and t_irradiation.n > 0:
+                delta_t = t_irradiation.n / N
+                charge_uncertainty = delta_t * np.sqrt(N) * sigma_noise
+            else:
+                charge_uncertainty = 0.0
 
-        self.integrated_charge = ufloat(total_charge, np.std(self.df['current'][beam_mask]))
+            integrated_charge = ufloat(total_charge, charge_uncertainty)
+            
+            # average current (uncertanty propagates automatically via I = Q / t)
+            if t_irradiation.n > 0:
+                average_current = integrated_charge / t_irradiation
+            else:
+                average_current = np.nan
+
+        else:
+            integrated_charge = np.nan
+            average_current = np.nan
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -131,7 +166,7 @@ class ElectrometerDataAnalyzer:
         # add relevant metadata to the plot
         fig.add_annotation(
             text=f"Beam Start: {self.beam_start_time}\nBeam End: {self.beam_end_time}\n"
-                 f"Integrated Charge: {self.integrated_charge:.2e} C",
+                 f"Integrated Charge: {integrated_charge:.2e} C",
             xref="paper", yref="paper",
             x=0.05, y=0.90,
             showarrow=False,
@@ -145,7 +180,9 @@ class ElectrometerDataAnalyzer:
         self.beam_data = BeamData(
             start_of_beam=self.beam_start_time,
             end_of_beam=self.beam_end_time,
-            integrated_charge=self.integrated_charge,
+            t_irradiation=t_irradiation,
+            integrated_charge=integrated_charge,
+            average_current=average_current,
             plot=fig
         )
 
