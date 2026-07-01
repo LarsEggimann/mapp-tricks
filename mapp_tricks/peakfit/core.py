@@ -305,6 +305,9 @@ class PeakFitter:
         
         # Convert to DataFrame and save
         results_df = pd.DataFrame(results)
+        if results_df.empty:
+            print("Warning: Result Dataframe is empty. No files were successfully processed. Check input.")
+            return return_results
         
         # Remove complex objects for CSV export
         csv_results = results_df.drop(columns=['fit_params', 'x', 'y', 'fit_result', 'calibration'], 

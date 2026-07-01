@@ -37,7 +37,12 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
          float real_time in seconds,
          float live_time in seconds)
     """
-    with open(filepath) as f:
+
+    path = os.path.abspath(filepath)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File {path} does not exist.")
+
+    with open(path) as f:
         lines = f.readlines()
 
     tz_info = timezone
@@ -84,7 +89,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
             if line.startswith("#-----------------------------------------------------------------------"):
                 data_start = i + 1
                 break
-        df = pd.read_csv(filepath, sep='\t', skiprows=data_start, 
+        df = pd.read_csv(path, sep='\t', skiprows=data_start, 
                      names=["channel", "energy", "counts", "rate"])
 
     else:
@@ -93,7 +98,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
             if line.startswith("Channel Energy Counts"):
                 data_start = i + 1
                 break
-        df = pd.read_csv(filepath, sep=' ', skiprows=data_start, 
+        df = pd.read_csv(path, sep=' ', skiprows=data_start, 
                      names=["channel", "energy", "counts"])
 
     return df, (0, 0, 0, 0), start_time, real_time, live_time, total_gamma_count
