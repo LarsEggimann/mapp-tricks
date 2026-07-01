@@ -12,59 +12,98 @@ def _parse_tuple(val: str) -> Optional[tuple[float, float]]:
             return None
     return None
 
+def safe_ufloat_parse(val):
+    if not isinstance(val, str):
+        return val
+    try:
+        return ufloat_fromstr(val.strip())
+    except ValueError:
+        # If it fails to parse (e.g. "N/A" or mixed text), return original value
+        print(f"Warning: Failed to parse ufloat from value: {val}, returning original value.")
+        return val
+
 def parse_csv(filename: str) -> pd.DataFrame:
     """
     Parse CSV file and apply some tests to try to automatically detect and parse columns as ufloat, datetime, or tuple when appropriate.
     The parsing is based on the presence of specific patterns in the column values, if any cell in the column contains a string with the pattern:
-    - 'value +/- uncertainty', it will be parsed as a ufloat.
+    - 'value +/- uncertainty', also detects the bracket notation ufloat, e.g. 1.23(45), it will be parsed as a ufloat.
     - '(number, number)', it will be parsed as a tuple of two floats.
     - 'YYYY-MM-DD HH:MM:SS', it will be parsed as a datetime.
     """
     df = pd.read_csv(filename)
     for col in df.columns:
-        # check if columns contain '+/-' in any cell, if so, parse as ufloat
-        if df[col].astype(str).str.contains(r'\+/-').any():
-            df[col] = df[col].apply(lambda x: ufloat_fromstr(x) if isinstance(x, str) else x)
+        col_str = df[col].astype(str)
+
+        # check if columns contain '+/-' in any cell, if so, parse as ufloat, also check for the bracket notation ufloat, e.g. 1.23(45)
+        ufloat_bracket_pattern = r'\d+(?:\.\d+)?\(\d+(?:\.\d+)?\)'
+        if col_str.str.contains(r'\+/-', regex=True).any() or col_str.str.contains(ufloat_bracket_pattern, regex=True).any():
+            df[col] = df[col].apply(safe_ufloat_parse)
 
         # when the columns contain a opening and closing bracket and two numbers, parse it as tuple
-        elif df[col].astype(str).str.contains(r'\(\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*\)').any():
+        elif col_str.str.contains(r'\(\s*[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+\s*\)', regex=True).any():
             df[col] = df[col].apply(lambda x: _parse_tuple(x) if isinstance(x, str) else x)
 
         # if the column contains an ISO datetime string, parse it as datetime
-        elif df[col].astype(str).str.contains(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}').any():
+        elif col_str.str.contains(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', regex=True).any():
             df[col] = pd.to_datetime(df[col], errors='coerce')
             
     return df
 
-def store_csv(df: pd.DataFrame, filename: str) -> None:
+def store_csv(df: pd.DataFrame, filename: str, ufloat_format: str = 'precision') -> None:
     """
     Store DataFrame to a standardized CSV file while preserving the precision of the ufloat
+    values. The ufloat_format parameter can be set to 'precision' to store the values with their precision, or 'bracket' to store the nice bracket notation.
     """
     for index, row in df.iterrows():
         for col in df.columns:
             if isinstance(row[col], Variable) or isinstance(row[col], UFloat):
                 ufloat_val = row[col]
-                df.at[index, col] = f"{ufloat_val.nominal_value}+/-{ufloat_val.std_dev}"
+                if ufloat_format == 'precision':
+                    df.at[index, col] = f"{ufloat_val.nominal_value}+/-{ufloat_val.std_dev}"
+                elif ufloat_format == 'bracket':
+                    df.at[index, col] = f"{ufloat_val:.2uS}"
     df.to_csv(filename, index=False)
 
 
 def convert_color_hex_to_rgba(hex_color: str) -> str:
-    hex_str = hex_color.replace('#', '')
-    if len(hex_str) != 6:
-        hex_str = hex_str + '0'
+    # Remove the hash sign
+    hex_str = hex_color.lstrip('#')
+    
+    # Extract RGB components
     r = int(hex_str[0:2], 16)
     g = int(hex_str[2:4], 16)
     b = int(hex_str[4:6], 16)
-    a = 1
-    if len(hex_str) > 6:
-        alpha = float(int(hex_str[6:10], 16) / 255 * 1)
-        a = round(alpha, 2)
-    return 'rgba({},{},{},{})'.format(r, g, b, a)
+    
+    # Extract Alpha component if it exists (8-character hex)
+    if len(hex_str) == 8:
+        alpha_hex = hex_str[6:8]
+        # Divide by 255 to get a float between 0.0 and 1.0
+        a = round(int(alpha_hex, 16) / 255, 2)
+    else:
+        a = 1.0
+        
+    return f"rgba({r}, {g}, {b}, {a})"
 
 
 
 
 def parse_srim_data_normalized(file_path):
+    """Parse SRIM data file and normalize the values to standard units (MeV for energy and cm for length).
+
+    Args:
+        file_path str: The path to the SRIM data file.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing the normalized SRIM data. Units of the stopping power depends on the units chosen in SRIM, normally I use MeV / (mg cm^2)
+                      Columns include:
+                        - Energy_MeV: Energy in MeV
+                        - dE/dx_Elec: Electronic stopping power
+                        - dE/dx_Nuclear: Nuclear stopping power
+                        - dE/dx_Total: Total stopping power
+                        - Projected_Range_cm: Projected range in cm
+                        - Longitudinal_Straggling_cm: Longitudinal straggling in cm
+                        - Lateral_Straggling_cm: Lateral straggling in cm
+    """
     energy_to_mev = {
         "eV": 1e-6,
         "keV": 1e-3,
