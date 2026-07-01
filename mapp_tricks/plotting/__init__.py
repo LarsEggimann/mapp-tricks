@@ -1,3 +1,3 @@
-from .plotly_styler import apply_my_plotly_style, apply_my_plotly_style_with_transparent_background, float_legend
+from .plotly_styler import apply_my_plotly_style, apply_my_plotly_style_with_transparent_background, float_legend, save_for_presi
 from .exfor_plotter import plot_exfor_cs_data
 from .decay_plotter import plot_decay_curve_with_fit, plot_decay_curve_with_double_exp_fit, plot_bateman_decay_curve

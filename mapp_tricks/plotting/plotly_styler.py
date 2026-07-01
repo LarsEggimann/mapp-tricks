@@ -7,12 +7,12 @@ from ..utils import convert_color_hex_to_rgba
 base = pio.templates["seaborn"]
 my_plotly_theme = deepcopy(base)
 
-grid_color = "#F5F5F5"
+grid_color = convert_color_hex_to_rgba("#7B7B7B58")
 line_color = "#000000"
 text_color = "#000000"
 bg_color = "#FFFFFF"
 
-error_bar_color = convert_color_hex_to_rgba("#3f3f3f90")
+error_bar_color = convert_color_hex_to_rgba("#3f3f3f7b")
 
 my_plotly_theme.layout.update(
 
@@ -110,3 +110,14 @@ def float_legend(fig: go.Figure, x: float = 0.95, y: float = 0.98) -> go.Figure:
         )
     )
     return fig
+
+
+def save_for_presi(fig: go.Figure, filename: str, scale=10, width=850, height=450):
+    """
+        Applies transparet background and saves the figure as whatever is specified in the filename. The file type is determined by the extension of the filename.
+    """
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+    )
+    fig.write_image(filename, scale=scale, width=width, height=height)
