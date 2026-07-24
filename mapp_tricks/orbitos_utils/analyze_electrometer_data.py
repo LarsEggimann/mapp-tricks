@@ -4,6 +4,7 @@ import pandas as pd # type: ignore
 import numpy as np # type: ignore
 import plotly.graph_objects as go  # type: ignore
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from uncertainties import ufloat, UFloat # type: ignore
 from uncertainties import unumpy as unp # type: ignore
 
@@ -29,7 +30,7 @@ class BeamData:
 
 
 class ElectrometerDataAnalyzer:
-    def __init__(self, path_to_csv: str, beam_threshold: float = 400e-12, timezone:datetime.tzinfo = datetime.now().astimezone().tzinfo):
+    def __init__(self, path_to_csv: str, beam_threshold: float = 400e-12, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
         self.path_to_csv = path_to_csv
         self.beam_threshold = beam_threshold
         self.plot = None

@@ -201,7 +201,7 @@ class PeakFitter:
                       output_dir: Optional[str] = None,
                       save_plots: bool = True,
                       save_plotly: bool = False,
-                      file_pattern: str = "*.txt",
+                      file_pattern: str = "*.CNF",
                       process_multiple_peaks:bool = False,
                       ) -> list[PeakFitterResult]:
         """
@@ -219,7 +219,7 @@ class PeakFitter:
             Whether to save matplotlib plots
         save_plotly : bool, default False
             Whether to save interactive plotly plots
-        file_pattern : str, default "*.txt"
+        file_pattern : str, default "*.CNF"
             File pattern to match
         process_multiple_peaks : bool, default False
             Whether to process multiple peaks in each file

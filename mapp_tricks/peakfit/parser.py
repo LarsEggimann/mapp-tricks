@@ -15,6 +15,7 @@ from uncertainties import ufloat # type: ignore
 from zoneinfo import ZoneInfo
 
 from .models import PeakFitterResult
+from .read_cnf import read_cnf_file
 
 
 def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
@@ -42,64 +43,90 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
     if not os.path.exists(path):
         raise FileNotFoundError(f"File {path} does not exist.")
 
-    with open(path) as f:
-        lines = f.readlines()
 
     tz_info = timezone
 
-    # Extract Start Time: # Start time:    2025-05-07, 14:07:49
-    start_time = None
-    for line in lines:
-        # Start time:    2025-07-31, 14:24:40
-        if line.startswith("# Start time:"):
-            start_time = ':'.join(line.split(":")[1:]).strip()
-            start_time = datetime.strptime(start_time, "%Y-%m-%d, %H:%M:%S")
-            start_time = start_time.replace(tzinfo=tz_info)
-            break
-        # StartTime: 2025-08-15T15:20:33.988032
-        if line.startswith("StartTime:"):
-            start_time = datetime.fromisoformat(':'.join(line.split(":")[1:]).strip())
-            start_time = start_time.replace(tzinfo=tz_info)
-            break
+    # check if file is .txt of .cnf file
+    if path.endswith(".cnf") or path.endswith(".CNF"):
+        # read cnf file and convert to txt
+        res = read_cnf_file(path)
 
-    # Extract real_time
-    real_time = None
-    for line in lines:
-        if line.startswith("# Real time (s):") or line.startswith("RealTime: "):
-            real_time = float(line.split(":")[1].split()[0].strip())
-            break
+        # parse start time %d-%m-%Y, %H:%M:%S from res["Start time"]
+        start_time = datetime.strptime(res["Start time"], "%d-%m-%Y, %H:%M:%S")
+        start_time.replace(tzinfo=tz_info)
+        real_time = res["Real time"]
+        live_time = res["Live time"]
+        total_gamma_count = res["Total counts"]
 
-    # Extract live_time
-    live_time = None
-    for line in lines:
-        if line.startswith("# Live time (s):") or line.startswith("LiveTime: "):
-            live_time = float(line.split(":")[1].split()[0].strip())
-            break
-
-    # Extract total gamma count
-    total_gamma_count = None
-    for line in lines:
-        if line.startswith("# Total counts:") or line.startswith("TotalGammaCounts: "):
-            total_gamma_count = float(line.split(":")[1].split()[0].strip())
-            break
-
-    # Find format of data if first line is "#" then we have converted from cnf
-    if lines[0].startswith("#"):
-        for i, line in enumerate(lines):
-            if line.startswith("#-----------------------------------------------------------------------"):
-                data_start = i + 1
+        channels = res["Channels"]
+        energys = res["Energy"]
+        counts = res["Channels data"]
+        df = pd.DataFrame({
+            "channel": channels,
+            "energy": energys,
+            "counts": counts,
+            "rate": counts / live_time
+        })
+            
+    elif path.endswith(".txt"):
+        with open(path) as f:
+            lines = f.readlines()
+        # Extract Start Time: # Start time:    2025-05-07, 14:07:49
+        start_time = None
+        for line in lines:
+            # Start time:    2025-07-31, 14:24:40
+            if line.startswith("# Start time:"):
+                start_time = ':'.join(line.split(":")[1:]).strip()
+                start_time = datetime.strptime(start_time, "%Y-%m-%d, %H:%M:%S")
+                start_time = start_time.replace(tzinfo=tz_info)
                 break
-        df = pd.read_csv(path, sep='\t', skiprows=data_start, 
-                     names=["channel", "energy", "counts", "rate"])
+            # StartTime: 2025-08-15T15:20:33.988032
+            if line.startswith("StartTime:"):
+                start_time = datetime.fromisoformat(':'.join(line.split(":")[1:]).strip())
+                start_time = start_time.replace(tzinfo=tz_info)
+                break
+
+        # Extract real_time
+        real_time = None
+        for line in lines:
+            if line.startswith("# Real time (s):") or line.startswith("RealTime: "):
+                real_time = float(line.split(":")[1].split()[0].strip())
+                break
+
+        # Extract live_time
+        live_time = None
+        for line in lines:
+            if line.startswith("# Live time (s):") or line.startswith("LiveTime: "):
+                live_time = float(line.split(":")[1].split()[0].strip())
+                break
+
+        # Extract total gamma count
+        total_gamma_count = None
+        for line in lines:
+            if line.startswith("# Total counts:") or line.startswith("TotalGammaCounts: "):
+                total_gamma_count = float(line.split(":")[1].split()[0].strip())
+                break
+
+        # Find format of data if first line is "#" then we have converted from cnf
+        if lines[0].startswith("#"):
+            for i, line in enumerate(lines):
+                if line.startswith("#-----------------------------------------------------------------------"):
+                    data_start = i + 1
+                    break
+            df = pd.read_csv(path, sep='\t', skiprows=data_start, 
+                        names=["channel", "energy", "counts", "rate"])
+
+        else:
+            # InterSpect text output format
+            for i, line in enumerate(lines):
+                if line.startswith("Channel Energy Counts"):
+                    data_start = i + 1
+                    break
+            df = pd.read_csv(path, sep=' ', skiprows=data_start, 
+                        names=["channel", "energy", "counts"])
 
     else:
-        # InterSpect text output format
-        for i, line in enumerate(lines):
-            if line.startswith("Channel Energy Counts"):
-                data_start = i + 1
-                break
-        df = pd.read_csv(path, sep=' ', skiprows=data_start, 
-                     names=["channel", "energy", "counts"])
+        raise ValueError(f"Unsupported file format: {path}. Only .txt and .cnf files are supported.")
 
     return df, (0, 0, 0, 0), start_time, real_time, live_time, total_gamma_count
 
