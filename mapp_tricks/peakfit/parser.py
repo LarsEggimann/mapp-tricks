@@ -9,18 +9,18 @@ import os
 import glob
 import re
 from datetime import datetime
-from typing import Optional
 import pandas as pd # type: ignore
+import numpy as np # type: ignore
 from uncertainties import ufloat # type: ignore
 from zoneinfo import ZoneInfo
 
-from .models import PeakFitterResult
+from .models import PeakFitterResult, SpectrometryData
 from .read_cnf import read_cnf_file
 
 
-def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
+def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")) -> SpectrometryData:
     """
-    Parse a spectrum file to extract energy calibration and data.
+    Parse a spectrum file to extract energy calibration and data into a SpectrometryData object.
     
     Parameters
     ----------
@@ -31,90 +31,131 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
 
     Returns
     -------
-    tuple
-        (DataFrame with columns ['channel', 'energy', 'counts', 'rate'], 
-         tuple of calibration parameters (A0, A1, A2, A3),
-         datetime start_time,
-         float real_time in seconds,
-         float live_time in seconds)
+    SpectrometryData
+        Dataclass containing sample metadata, calibration data, and channel measurements.
     """
-
     path = os.path.abspath(filepath)
     if not os.path.exists(path):
         raise FileNotFoundError(f"File {path} does not exist.")
 
-
     tz_info = timezone
 
-    # check if file is .txt of .cnf file
+    # --- Initialize Defaults ---
+    sample_name = os.path.basename(filepath)
+    sample_id = ""
+    sample_type = ""
+    user_name = ""
+    sample_description = ""
+    
+    start_time = datetime.now(tz_info)
+    real_time = 0.0
+    live_time = 0.0
+    total_gamma_count = 0
+    
+    left_marker = 0
+    right_marker = 0
+    counts_in_markers = 0
+    
+    energy_coefficients = [0.0, 0.0, 0.0, 0.0]
+    shape_coefficients  = [0.0, 0.0, 0.0, 0.0]
+    energy_unit = "keV"
+    
+    channels = []
+    energys = []
+    counts = []
+
     if path.endswith(".cnf") or path.endswith(".CNF"):
-        # read cnf file and convert to txt
         res = read_cnf_file(path)
 
-        # parse start time %d-%m-%Y, %H:%M:%S from res["Start time"]
-        start_time = datetime.strptime(res["Start time"], "%d-%m-%Y, %H:%M:%S")
-        start_time.replace(tzinfo=tz_info)
-        real_time = res["Real time"]
-        live_time = res["Live time"]
-        total_gamma_count = res["Total counts"]
+        # update metadata if available in CNF
+        sample_name = res.get("Sample name", sample_name)
+        sample_id = str(res.get("Sample id", sample_id))
+        sample_type = str(res.get("Sample type", sample_type))
+        user_name = str(res.get("User name", user_name))
+        sample_description = str(res.get("Sample description", sample_description))
 
-        channels = res["Channels"]
-        energys = res["Energy"]
-        counts = res["Channels data"]
-        df = pd.DataFrame({
-            "channel": channels,
-            "energy": energys,
-            "counts": counts,
-            "rate": counts / live_time
-        })
+        if "Start time" in res:
+            start_time = datetime.strptime(res["Start time"], "%d-%m-%Y, %H:%M:%S")
+            start_time = start_time.replace(tzinfo=tz_info)
+            
+        real_time = float(res.get("Real time", real_time))
+        live_time = float(res.get("Live time", live_time))
+        total_gamma_count = int(res.get("Total counts", total_gamma_count))
+        
+        left_marker = int(res.get("Left marker", left_marker))
+        right_marker = int(res.get("Right marker", right_marker))
+        counts_in_markers = int(res.get("Counts in markers", counts_in_markers))
+
+        energy_coefficients = res.get("Energy coefficients", energy_coefficients)
+        shape_coefficients = res.get("Shape coefficients", shape_coefficients)
+        energy_unit = res.get("Energy unit", energy_unit)
+
+        channels = res.get("Channels", [])
+        energys = res.get("Energy", [])
+        counts = res.get("Channels data", [])
             
     elif path.endswith(".txt"):
         with open(path) as f:
             lines = f.readlines()
-        # Extract Start Time: # Start time:    2025-05-07, 14:07:49
-        start_time = None
+            
+        # Extract Start Time
         for line in lines:
-            # Start time:    2025-07-31, 14:24:40
             if line.startswith("# Start time:"):
-                start_time = ':'.join(line.split(":")[1:]).strip()
-                start_time = datetime.strptime(start_time, "%Y-%m-%d, %H:%M:%S")
+                start_time_str = ':'.join(line.split(":")[1:]).strip()
+                start_time = datetime.strptime(start_time_str, "%Y-%m-%d, %H:%M:%S")
                 start_time = start_time.replace(tzinfo=tz_info)
                 break
-            # StartTime: 2025-08-15T15:20:33.988032
             if line.startswith("StartTime:"):
-                start_time = datetime.fromisoformat(':'.join(line.split(":")[1:]).strip())
+                start_time_str = ':'.join(line.split(":")[1:]).strip()
+                start_time = datetime.fromisoformat(start_time_str)
                 start_time = start_time.replace(tzinfo=tz_info)
                 break
 
         # Extract real_time
-        real_time = None
         for line in lines:
             if line.startswith("# Real time (s):") or line.startswith("RealTime: "):
                 real_time = float(line.split(":")[1].split()[0].strip())
                 break
 
         # Extract live_time
-        live_time = None
         for line in lines:
             if line.startswith("# Live time (s):") or line.startswith("LiveTime: "):
                 live_time = float(line.split(":")[1].split()[0].strip())
                 break
 
         # Extract total gamma count
-        total_gamma_count = None
+        total_parsed = None
         for line in lines:
             if line.startswith("# Total counts:") or line.startswith("TotalGammaCounts: "):
-                total_gamma_count = float(line.split(":")[1].split()[0].strip())
+                total_parsed = int(float(line.split(":")[1].split()[0].strip()))
                 break
 
-        # Find format of data if first line is "#" then we have converted from cnf
+        # Find format of data, if it starts with '#' it's file converted with cnfconv
         if lines[0].startswith("#"):
+            # Converted from CNF format
             for i, line in enumerate(lines):
                 if line.startswith("#-----------------------------------------------------------------------"):
                     data_start = i + 1
                     break
             df = pd.read_csv(path, sep='\t', skiprows=data_start, 
-                        names=["channel", "energy", "counts", "rate"])
+                             names=["channel", "energy", "counts", "rate"])
+
+            # we know its a cnfconv converted file, so we can extract the some more metadata
+            # Energy calibration coefficients ( E = sum(Ai * n**i) )
+            #     A0: -0.126274
+            #     A1: 0.243864
+            #     A2: 0.000000
+            #     A3: 0.000000
+            # Energy unit: keV
+            if "Energy calibration coefficients" in lines:
+                coeffs_start = lines.index("Energy calibration coefficients ( E = sum(Ai * n**i) )\n") + 1
+                energy_coefficients = []
+                for j in range(4):
+                    coeff_line = lines[coeffs_start + j]
+                    coeff_value = float(coeff_line.split(":")[1].strip())
+                    energy_coefficients.append(coeff_value)
+                energy_unit_line = lines[coeffs_start + 4]
+                energy_unit = energy_unit_line.split(":")[1].strip()
 
         else:
             # InterSpect text output format
@@ -122,15 +163,52 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
                 if line.startswith("Channel Energy Counts"):
                     data_start = i + 1
                     break
-            df = pd.read_csv(path, sep=' ', skiprows=data_start, 
-                        names=["channel", "energy", "counts"])
+            df = pd.read_csv(path, sep=r'\s+', skiprows=data_start, 
+                             names=["channel", "energy", "counts"])
+            # we know its an InterSpect exported file, so we can extract some more metadata
+            # Coefficients: -0.126274 0.243864
+            for line in lines:
+                if line.startswith("Coefficients:"):
+                    coeffs_str = line.split(":")[1].strip()
+                    energy_coefficients = [float(x) for x in coeffs_str.split()]
+                    break
+
+        # Extract lists from dataframe
+        channels = df["channel"].astype(int).tolist()
+        energys = df["energy"].astype(float).tolist()
+        counts = df["counts"].astype(int).tolist()
+
+        if total_parsed is not None:
+            total_gamma_count = total_parsed
+        else:
+            total_gamma_count = sum(counts)
 
     else:
         raise ValueError(f"Unsupported file format: {path}. Only .txt and .cnf files are supported.")
 
-    return df, (0, 0, 0, 0), start_time, real_time, live_time, total_gamma_count
 
-def sum_spectras(paths_to_txt: list[str], result_file_path_name: str):
+    return SpectrometryData(
+        sample_name=sample_name,
+        sample_id=sample_id,
+        sample_type=sample_type,
+        user_name=user_name,
+        sample_description=sample_description,
+        start_time=start_time,
+        real_time=real_time,
+        live_time=live_time,
+        total_counts=total_gamma_count,
+        left_marker=left_marker,
+        right_marker=right_marker,
+        counts_in_markers=counts_in_markers,
+        energy_coefficients=energy_coefficients,
+        shape_coefficients=shape_coefficients,
+        energy_unit=energy_unit,
+        channels=channels,
+        energy=energys,
+        channels_data=counts
+    )
+
+def sum_spectras(paths_to_txt: list[str], result_file_path_name: str) -> SpectrometryData:
     """
     Sum the spectra from multiple text files.
 
@@ -141,11 +219,11 @@ def sum_spectras(paths_to_txt: list[str], result_file_path_name: str):
 
     Returns
     -------
-    DataFrame
-        DataFrame containing the summed spectra
+    SpectrometryData
+        Dataclass containing the summed spectra
     """
 
-    summed_df = pd.DataFrame()
+    summed_array = np.array([])
     start_times = []
     live_times = []
     real_times = []
@@ -153,23 +231,23 @@ def sum_spectras(paths_to_txt: list[str], result_file_path_name: str):
 
     for path in paths_to_txt:
 
-        df, _, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(path)
+        sd = parse_spectrum_file(path)
 
         # # check the first df entry, if it starts with channel 0, delete it
         # if not df.empty and df.iloc[0]['channel'] == 0:
         #     df = df.iloc[1:]
 
 
-        start_times.append(start_time)
-        real_times.append(real_time)
-        live_times.append(live_time)
-        total_gamma_counts.append(total_gamma_count)
+        start_times.append(sd.start_time)
+        real_times.append(sd.real_time)
+        live_times.append(sd.live_time)
+        total_gamma_counts.append(sd.total_counts)
 
-        # sum "energy" of spectra
-        if summed_df.empty:
-            summed_df = df
+        # sum "counts" of spectra
+        if summed_array.size == 0:
+            summed_array = np.array(sd.channels_data)
         else:
-            summed_df['counts'] = summed_df['counts'] + df['counts']
+            summed_array = summed_array + np.array(sd.channels_data)
 
     # find earliest start_time
     earliest_start_time = min(start_times)
@@ -179,57 +257,20 @@ def sum_spectras(paths_to_txt: list[str], result_file_path_name: str):
     summed_real_time = sum(real_times)
     summed_total_gamma_count = sum(total_gamma_counts)
 
-    # text file example exported from InterSpect
-
-    # Original File Name: /tmp/summed_0f8f-53d9-4ab3-49ad
-    # TotalGammaLiveTime: 355880 seconds
-    # TotalRealTime: 356400 seconds
-    # TotalGammaCounts: 4.05058e+06 seconds
-    # TotalNeutron: 0 seconds
-    # Remark: N42 file created by: InterSpec
-    # Remark: MCA Type: Lynx
-
-
-    # StartTime: 2025-08-27T14:28:04.021681
-    # LiveTime: 355880 seconds
-    # RealTime: 356400 seconds
-    # SampleNumber: 1
-    # DetectorName: My ADC
-    # Title: Combination-20250901 09:07:25
-    # EquationType: Polynomial
-    # Coefficients: -0.126274 0.243864
-    # Channel Energy Counts
-    # 0 -0.126274 0
-    # 1 0.11759 0
-    # 2 0.361455 0
+    # take last spectrometry data object and update it to reflect the summed data
+    sd.channels_data = summed_array.tolist()
+    sd.start_time = earliest_start_time
+    sd.live_time = summed_live_time
+    sd.real_time = summed_real_time
+    sd.total_counts = int(summed_total_gamma_count)
 
     # create folder if not exists
     os.makedirs(os.path.dirname(result_file_path_name), exist_ok=True)
 
-    with open(result_file_path_name, 'w') as f:
-        f.write(f"Original File Name: {path}\n")
-        f.write(f"TotalGammaLiveTime: {summed_live_time} seconds\n")
-        f.write(f"TotalRealTime: {summed_real_time} seconds\n")
-        f.write(f"TotalGammaCounts: {int(summed_total_gamma_count)} seconds\n")
-        f.write(f"TotalNeutron: 0 seconds\n")
-        f.write(f"Remark: N42 file created by: Custom Python Script made by Lars Eggimann\n")
-        f.write(f"Remark: MCA Type: Lynx\n")
-        f.write(f"\n")
-        f.write(f"StartTime: {earliest_start_time}\n")
-        f.write(f"LiveTime: {summed_live_time} seconds\n")
-        f.write(f"RealTime: {summed_real_time} seconds\n")
-        f.write(f"SampleNumber: 1\n")
-        f.write(f"DetectorName: My ADC\n")
-        f.write(f"Title: Summation-{datetime.now()}\n")
-        f.write(f"EquationType: Polynomial\n")
-        f.write(f"Coefficients: -0.126274 0.243864\n")
-        f.write(f"Channel Energy Counts\n")
-        for index, row in summed_df.iterrows():
-            f.write(f"{row['channel']} {row['energy']} {row['counts']}\n")
-
+    sd.write_to_file(result_file_path_name)
     print(f"Summed spectra saved to {result_file_path_name}")
 
-    return summed_df, earliest_start_time, summed_real_time, summed_live_time
+    return sd
 
 def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, result_file_name: str):
     """
@@ -247,8 +288,8 @@ def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, resu
 
     Returns
     -------
-    DataFrame
-        DataFrame containing the summed spectra
+    SpectrometryData
+        Dataclass containing the summed spectra
     """
     
     # handle multiple patterns separated by '|'

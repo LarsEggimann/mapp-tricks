@@ -5,6 +5,7 @@ This module provides the main PeakFitter class and related functions
 for fitting Gaussian peaks with linear backgrounds.
 """
 
+from dataclasses import dataclass, field
 import os
 import glob
 from datetime import datetime
@@ -14,12 +15,12 @@ import numpy as np
 import pandas as pd # type: ignore
 from uncertainties import ufloat # type: ignore
 from uncertainties import unumpy as unp # type: ignore
+import uncertainties as unc # type: ignore
 from tqdm.auto import tqdm # type: ignore
 from scipy.optimize import curve_fit # type: ignore
-import matplotlib.pyplot as plt # type: ignore
 
 from .parser import parse_spectrum_file
-from .models import PeakFitterResult
+from .models import PeakFitterResult, SpectrometryData
 
 def linear_func(x, m, b):
     """Linear function: y = mx + b"""
@@ -50,14 +51,14 @@ class PeakFitter:
     def __init__(self, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
         self.timezone: ZoneInfo = timezone
     
-    def fit_peak(self, df: pd.DataFrame, energy_range: Tuple[float, float]) -> Dict:
+    def fit_peak(self, spectra_data: SpectrometryData, energy_range: Tuple[float, float]) -> Dict:
         """
         Fit a Gaussian peak with linear background in the specified energy range.
         
         Parameters
         ----------
-        df : pd.DataFrame
-            DataFrame with columns ['channel', 'energy', 'counts', 'rate']
+        spectra_data : SpectrometryData
+            Dataclass containing spectrum information
         energy_range : tuple
             (min_energy, max_energy) for the fitting range
         background_params : dict, optional
@@ -73,24 +74,24 @@ class PeakFitter:
         # assert that energy_range is a tuple of two floats
         assert isinstance(energy_range, tuple) and len(energy_range) == 2, f"energy_range must be a tuple of two values, got {energy_range}"
         assert all(isinstance(e, (int, float)) for e in energy_range), f"energy_range values must be numbers, got {energy_range}, types: {[type(e) for e in energy_range]}"
-        # Filter data to energy range
-        df_peak = df[(df['energy'] >= energy_range[0]) & (df['energy'] <= energy_range[1])]
-        
-        x = df_peak['energy'].values
-        y = df_peak['counts'].values
+
+        # filter data to energy range
+        energy_arr = np.array(spectra_data.energy)
+        counts_arr = np.array(spectra_data.channels_data)
+        mask = (energy_arr >= energy_range[0]) & (energy_arr <= energy_range[1])
+        x = energy_arr[mask]
+        y = counts_arr[mask]
 
         # x and y are your data arrays
         popt, pcov = curve_fit(linear_gaussian_model, x, y, p0=[0, 0, np.sum(y), x[np.argmax(y)], 0.9])
-        perr = np.sqrt(np.diag(pcov))  # uncertainties for each parameter
 
-        slope = ufloat(popt[0], perr[0])
-        intercept = ufloat(popt[1], perr[1])
-        amp = ufloat(popt[2], perr[2])
-        center = ufloat(popt[3], perr[3])
-        sigma = ufloat(popt[4], perr[4])
+        # use uncertanties package to convert popt and pcov and preserve corralated uncertainties
+        cv_u = unc.correlated_values(popt, pcov)
+
+        slope, intercept, amp, center, sigma = cv_u
 
         # Calculate area with uncertainty
-        area = ufloat(amp.n, amp.s) / (x[1] - x[0])
+        area = amp / (x[1] - x[0])
 
         return {
             "area": area.n,
@@ -201,7 +202,7 @@ class PeakFitter:
                       output_dir: Optional[str] = None,
                       save_plots: bool = True,
                       save_plotly: bool = False,
-                      file_pattern: str = "*.CNF",
+                      file_pattern: str = "*.cnf",
                       process_multiple_peaks:bool = False,
                       ) -> list[PeakFitterResult]:
         """
@@ -219,7 +220,7 @@ class PeakFitter:
             Whether to save matplotlib plots
         save_plotly : bool, default False
             Whether to save interactive plotly plots
-        file_pattern : str, default "*.CNF"
+        file_pattern : str, default "*.cnf"
             File pattern to match
         process_multiple_peaks : bool, default False
             Whether to process multiple peaks in each file
@@ -232,7 +233,15 @@ class PeakFitter:
         from .plotting import plot_matplotlib, plot_plotly
         
         # Find files
+        # if cnf or CNF look for both
         files = glob.glob(os.path.join(folder_path, file_pattern))
+        if not files:
+            files = glob.glob(os.path.join(folder_path, file_pattern.upper()))
+
+        # try to check for txt files just because a lot of places i already use this and assume there are txt files
+        # this is of course not a good idea since if there are both cnf and txt files in the folder it will process only the cnf files and ignore the txt files.
+        if not files:
+            files = glob.glob(os.path.join(folder_path, file_pattern.replace(".cnf", ".txt")))
         
         # Try to sort files numerically if they follow numeric pattern, otherwise sort alphabetically
         def sort_key(x):
@@ -268,14 +277,14 @@ class PeakFitter:
         for file in tqdm(files, desc="peakfit - processing files", disable=process_multiple_peaks):
             try:
                 # Parse file
-                df, calib, start_time, real_time, live_time, total_gamma_count = parse_spectrum_file(file, timezone=self.timezone)
+                sd = parse_spectrum_file(file, timezone=self.timezone)
                 # Fit peak
-                res = self.fit_peak(df, energy_range)
+                res = self.fit_peak(sd, energy_range)
                 res["filename"] = file
-                res["calibration"] = calib
-                res["start_time"] = start_time
-                res["real_time"] = real_time
-                res["live_time"] = live_time
+                res["calibration"] = sd.energy_coefficients
+                res["start_time"] = sd.start_time
+                res["real_time"] = sd.real_time
+                res["live_time"] = sd.live_time
 
                 results.append(res)
 
@@ -288,16 +297,16 @@ class PeakFitter:
                 return_results.append(PeakFitterResult(
                     area=ufloat(res["area"], res["area_err"]),
                     centroid=ufloat(res["centroid"], res["centroid_err"]),
-                    start_time=start_time,
-                    real_time=real_time,
-                    live_time=live_time,
+                    start_time=sd.start_time,
+                    real_time=sd.real_time,
+                    live_time=sd.live_time,
                     amplitude=ufloat(res["amplitude"], res["amplitude_err"]),
                     sigma=ufloat(res["sigma"], res["sigma_err"]),
                     figure=fig
                 ))
                 
                 if save_plotly:
-                    plot_plotly(res, df, save_path=os.path.join(plots_dir, f"{plots_base_filename}.html"))
+                    plot_plotly(res, sd, save_path=os.path.join(plots_dir, f"{plots_base_filename}.html"))
                 
             except Exception as e:
                 print(f"Error processing {file}: {e}")

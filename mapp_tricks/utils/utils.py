@@ -33,10 +33,9 @@ def parse_csv(filename: str) -> pd.DataFrame:
     df = pd.read_csv(filename)
     for col in df.columns:
         col_str = df[col].astype(str)
-
-        # check if columns contain '+/-' in any cell, if so, parse as ufloat, also check for the bracket notation ufloat, e.g. 1.23(45)
+        # check if columns contain '+/-' or '±' in any cell, if so, parse as ufloat, also check for the bracket notation ufloat, e.g. 1.23(45)
         ufloat_bracket_pattern = r'\d+(?:\.\d+)?\(\d+(?:\.\d+)?\)'
-        if col_str.str.contains(r'\+/-', regex=True).any() or col_str.str.contains(ufloat_bracket_pattern, regex=True).any():
+        if col_str.str.contains(r'\+/-', regex=True).any() or col_str.str.contains(f'±', regex=True).any() or col_str.str.contains(ufloat_bracket_pattern, regex=True).any():
             df[col] = df[col].apply(safe_ufloat_parse)
 
         # when the columns contain a opening and closing bracket and two numbers, parse it as tuple

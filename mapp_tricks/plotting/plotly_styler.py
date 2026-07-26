@@ -19,7 +19,7 @@ my_plotly_theme.layout.update(
     paper_bgcolor=bg_color,
     plot_bgcolor=bg_color,
 
-    margin=dict(l=0, r=0, t=50, b=80), 
+    margin=dict(l=10, r=10, t=50, b=80), 
     width=850,
     height=450,
     font=dict(

@@ -153,9 +153,9 @@ def read_cnf_file(filename, write_output=False):
     if set(('Channels', 'Left marker')) <= set(read_dic):
         read_dic.update(markers_integration(read_dic))
 
-    print(50*'=')
-    print(10*' '+'File '+str(filename)+' succesfully read!' + 10*' ')
-    print(50*'=')
+    # print(50*'=')
+    # print(10*' '+'File '+str(filename)+' succesfully read!' + 10*' ')
+    # print(50*'=')
 
     # If true, writes an text output file
     if write_output:

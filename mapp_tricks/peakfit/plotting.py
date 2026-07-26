@@ -12,6 +12,7 @@ import pandas as pd # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import plotly.graph_objects as go # type: ignore
 
+from mapp_tricks.peakfit.models import SpectrometryData
 
 def linear_func(x: np.ndarray, m: float, b: float):
     """Linear function: y = mx + b"""
@@ -84,7 +85,7 @@ def plot_matplotlib(res: dict, save_path: Optional[str] = None,
     return fig
 
 
-def plot_plotly(res: dict, df: pd.DataFrame, 
+def plot_plotly(res: dict, spectrometry_data: SpectrometryData, 
                range_x: Optional[Tuple[float, float]] = None,
                range_y: Optional[Tuple[float, float]] = None,
                save_path: Optional[str] = None) -> None:
@@ -95,8 +96,8 @@ def plot_plotly(res: dict, df: pd.DataFrame,
     ----------
     res : dict
         Results dictionary from peak fitting
-    df : pd.DataFrame
-        Full spectrum dataframe
+    spectrometry_data : SpectrometryData
+        Spectrometry data object
     range_x : tuple, optional
         X-axis range (min, max)
     range_y : tuple, optional
@@ -110,8 +111,8 @@ def plot_plotly(res: dict, df: pd.DataFrame,
     
     # Add spectrum data
     fig.add_trace(go.Scatter(
-        x=df['energy'], 
-        y=df['counts'],
+        x=spectrometry_data.energy, 
+        y=spectrometry_data.channels_data,
         mode='lines',
         name='Spectrum',
         line=dict(color='black', shape='hv'),  # hv creates step-like appearance
@@ -169,7 +170,7 @@ def plot_plotly(res: dict, df: pd.DataFrame,
     )
     
     # Add grid and set log scale for y-axis
-    max_counts = max(df['counts'])
+    max_counts = max(spectrometry_data.channels_data)
     log_max = np.log10(max_counts) + 0.5  # Add some padding
     fig.update_yaxes(
         type="log",

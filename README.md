@@ -3,6 +3,7 @@ Reusable code developed during my PhD in the Medical Applications of Particle Ph
 
 Please note that the documentation is by no means complete - you will find much undocumented functions, variables and classes in the code. If you have questions feel free to contact me. I only documented the parts that were used by colleagues or students.
 
+To parse .CNF spectra files I used the python script from this [repository](https://github.com/pbellino/CNFreader).
 
 Use at your own risk!
 - Lars Eggimann
