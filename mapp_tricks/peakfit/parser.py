@@ -7,14 +7,14 @@ energy calibration parameters and data.
 
 import os
 import glob
-import re
 from datetime import datetime
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
+from pyparsing import Literal
 from uncertainties import ufloat # type: ignore
 from zoneinfo import ZoneInfo
 
-from .models import PeakFitterResult, SpectrometryData
+from .models import PeakFitResult, SpectrometryData
 from .read_cnf import read_cnf_file
 
 
@@ -208,14 +208,37 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
         channels_data=counts
     )
 
-def sum_spectras(paths_to_txt: list[str], result_file_path_name: str) -> SpectrometryData:
+def _load_spectra_from_files(file_paths: list[str]) -> list[SpectrometryData]:
+    """
+    Load spectra from a list of file paths.
+
+    Parameters
+    ----------
+    file_paths : list[str]
+        List of file paths to load spectra from
+
+    Returns
+    -------
+    list[SpectrometryData]
+        List of SpectrometryData objects loaded from the files
+    """
+    loaded_spectra: list[SpectrometryData] = []
+    for path in file_paths:
+        try:
+            sd = parse_spectrum_file(path)
+            loaded_spectra.append(sd)
+        except Exception as e:
+            print(f"Error loading {path}: {e}")
+    return loaded_spectra
+
+def sum_spectra(loaded_spectra: list[SpectrometryData], result_file_path_name: str) -> SpectrometryData:
     """
     Sum the spectra from multiple text files.
 
     Parameters
     ----------
-    paths_to_txt : list[str]
-        List of paths to the text files
+    loaded_spectra : list[SpectrometryData]
+        List of loaded spectra data
 
     Returns
     -------
@@ -229,14 +252,7 @@ def sum_spectras(paths_to_txt: list[str], result_file_path_name: str) -> Spectro
     real_times = []
     total_gamma_counts = []
 
-    for path in paths_to_txt:
-
-        sd = parse_spectrum_file(path)
-
-        # # check the first df entry, if it starts with channel 0, delete it
-        # if not df.empty and df.iloc[0]['channel'] == 0:
-        #     df = df.iloc[1:]
-
+    for sd in loaded_spectra:
 
         start_times.append(sd.start_time)
         real_times.append(sd.real_time)
@@ -268,11 +284,11 @@ def sum_spectras(paths_to_txt: list[str], result_file_path_name: str) -> Spectro
     os.makedirs(os.path.dirname(result_file_path_name), exist_ok=True)
 
     sd.write_to_file(result_file_path_name)
-    print(f"Summed spectra saved to {result_file_path_name}")
+    print(f"Summed {len(loaded_spectra)} -> spectra saved to {result_file_path_name}")
 
     return sd
 
-def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, result_file_name: str):
+def sum_spectra_matching_pattern_in_folder(folder_path: str, pattern: str, result_file_name: str):
     """
     Sum the spectra from multiple text files in a folder matching a specific pattern.
 
@@ -306,14 +322,18 @@ def sum_spectras_matching_pattern_in_folder(folder_path: str, pattern: str, resu
     print(f"Found {len(paths_to_txt)} files matching pattern '{pattern}' in folder '{folder_path}'")
     print(f"Files: {paths_to_txt}")
     result_file_path = os.path.join(folder_path, result_file_name)
-    return sum_spectras(paths_to_txt, result_file_path)
 
-def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "sum", skip_first_n: int = 0):
+    spectra = _load_spectra_from_files(paths_to_txt)
+
+    return sum_spectra(spectra, result_file_path)
+
+def sum_spectra_in_folder(folder_path: str, file_type: Literal["*.txt", "*.cnf"] = '*.cnf', group_size: int = 4, prefix: str = "sum", skip_first_n: int = 0):
     """
     Groups spectra files in a folder and sums them up in numeric order.
 
     Args:
         folder_path (str): Path to the folder containing spectra files.
+        file_type (Literal["*.txt", "*.cnf"]): Type of spectra files to consider. Default = '*.cnf'.
         group_size (int): Number of spectra to sum in one group. Default = 4.
         prefix (str): Subfolder prefix for result files. Default = "sum".
         skip_first_n (int): Number of files to skip from the beginning. Default = 0.
@@ -322,54 +342,55 @@ def sum_spectra_in_folder(folder_path: str, group_size: int = 4, prefix: str = "
     folder_path = os.path.abspath(folder_path)
 
 
-    # find all spectra files (*.txt)
-    files = glob.glob(os.path.join(folder_path, "*.txt"))
+    # find all spectra files
+    file_type_str = str(file_type)
+    files = glob.glob(os.path.join(folder_path, file_type_str))
+    if not files:
+        # try with uppercase extension
+        files = glob.glob(os.path.join(folder_path, file_type_str.upper()))
+
+    if not files:
+        # try find txt files if file_type is not txt
+        if file_type_str != "*.txt":
+            files = glob.glob(os.path.join(folder_path, "*.txt"))
 
     if not files:
         print(f"No spectra files found in {folder_path}")
         return
 
-    # extract numeric part and sort numerically
-    def extract_num(fname):
-        match = re.search(r"(\d+)", os.path.basename(fname))
-        return int(match.group(1)) if match else float("inf")
+    print(f"Found {len(files)} spectra files in {folder_path}")
 
-    files = sorted(files, key=extract_num)
+    # load all the files
+    loaded_spectra = _load_spectra_from_files(files)
 
-    # skip first n files
-    files = files[skip_first_n:]
+    # sort files according to start_time: datetime
+    loaded_spectra.sort(key=lambda x: x.start_time)
+
+    # assert that the first spectra in list has min start_time
+    assert loaded_spectra[0].start_time == min(sd.start_time for sd in loaded_spectra), "First spectra does not have the earliest start_time, sorting failed"
+
+    # skip first n spectra if requested
+    loaded_spectra = loaded_spectra[skip_first_n:]
 
     # results folder
-
     result_dir = os.path.join(folder_path, prefix)
     os.makedirs(result_dir, exist_ok=True)
 
     # loop through files in groups
-    for i in range(0, len(files), group_size):
-        group = files[i:i + group_size]
+    for i in range(0, len(loaded_spectra), group_size):
+        group = loaded_spectra[i:i + group_size]
         if not group:
             continue
 
-        # build pattern (OR-separated filenames)
-        pattern = "|".join(os.path.basename(f) for f in group)
+        result_file_name = os.path.join(result_dir, f"summed_{i+1}-{i+group_size}.txt")
 
-        # get start/end numbers
-        start_num = extract_num(group[0])
-        end_num = extract_num(group[-1])
+        sum_spectra(group, result_file_name)
 
-        result_file_name = os.path.join(result_dir, f"summed_{start_num}-{end_num}.txt")
+    print(f"Finished summing spectra in groups of {group_size}. Results saved in {result_dir}")
 
-        sum_spectras_matching_pattern_in_folder(
-            folder_path=folder_path,
-            pattern=pattern,
-            result_file_name=result_file_name
-        )
-
-        print(f"Summed {len(group)} spectra → {result_file_name}")
-
-def read_peakfit_results_csv(filepath: str) -> list[PeakFitterResult]:
+def read_peakfit_results_csv(filepath: str) -> list[PeakFitResult]:
     """
-    Read peak fitting results from a CSV file and return a PeakFitterResult object.
+    Read peak fitting results from a CSV file and return a PeakFitResult object.
 
     Parameters
     ----------
@@ -378,12 +399,12 @@ def read_peakfit_results_csv(filepath: str) -> list[PeakFitterResult]:
 
     Returns
     -------
-    PeakFitterResult
-        Object containing the peak fitting results
+    list[PeakFitResult]
+        List of peak fitting results
     """
     df = pd.read_csv(filepath)
 
-    results:list[PeakFitterResult] = []
+    results:list[PeakFitResult] = []
     try:
         for index, row in df.iterrows():
             # header: area,area_err,centroid,centroid_err,amplitude,amplitude_err,sigma,sigma_err,energy_range,slope,slope_err,intercept,intercept_err,filename,start_time,real_time,live_time
@@ -396,7 +417,7 @@ def read_peakfit_results_csv(filepath: str) -> list[PeakFitterResult]:
             real_time = float(row['real_time'])
             live_time = float(row['live_time'])
 
-            result = PeakFitterResult(
+            result = PeakFitResult(
                 area=area,
                 centroid=centroid,
                 start_time=start_time,

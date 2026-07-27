@@ -20,7 +20,7 @@ from tqdm.auto import tqdm # type: ignore
 from scipy.optimize import curve_fit # type: ignore
 
 from .parser import parse_spectrum_file
-from .models import PeakFitterResult, SpectrometryData
+from .models import PeakFitResult, SpectrometryData
 
 def linear_func(x, m, b):
     """Linear function: y = mx + b"""
@@ -111,7 +111,7 @@ class PeakFitter:
             "intercept_err": intercept.s,
         }
     
-    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: Optional[str] = None) -> PeakFitterResult:
+    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: str | None = None) -> PeakFitResult:
         """
         Process a single spectrum file.
 
@@ -150,7 +150,7 @@ class PeakFitter:
 
         return res[0]
     
-    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: Optional[str] = None) -> List[PeakFitterResult]:
+    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: str | None = None) -> List[PeakFitResult]:
         """
         Process a single spectrum file for multiple peaks.
 
@@ -163,11 +163,12 @@ class PeakFitter:
 
         Returns
         -------
-        list of PeakFitterResult
+        list of PeakFitResult
             List containing fit results for each peak
         """
 
         # make sure file and parent folder exist
+        filepath = os.path.abspath(filepath)
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"File does not exist: {filepath}")
         parent_folder = os.path.dirname(filepath)
@@ -199,12 +200,12 @@ class PeakFitter:
         return all_results
 
     def process_folder(self, folder_path: str, energy_range: Tuple[float, float],
-                      output_dir: Optional[str] = None,
+                      output_dir: str | None = None,
                       save_plots: bool = True,
                       save_plotly: bool = False,
                       file_pattern: str = "*.cnf",
                       process_multiple_peaks:bool = False,
-                      ) -> list[PeakFitterResult]:
+                      ) -> list[PeakFitResult]:
         """
         Process all spectrum files in a folder.
         
@@ -222,8 +223,6 @@ class PeakFitter:
             Whether to save interactive plotly plots
         file_pattern : str, default "*.cnf"
             File pattern to match
-        process_multiple_peaks : bool, default False
-            Whether to process multiple peaks in each file
 
         Returns
         -------
@@ -294,7 +293,7 @@ class PeakFitter:
                 fig = None
                 if save_plots:
                     fig = plot_matplotlib(res, save_path=os.path.join(plots_dir, f"{plots_base_filename}.pdf"))
-                return_results.append(PeakFitterResult(
+                return_results.append(PeakFitResult(
                     area=ufloat(res["area"], res["area_err"]),
                     centroid=ufloat(res["centroid"], res["centroid_err"]),
                     start_time=sd.start_time,

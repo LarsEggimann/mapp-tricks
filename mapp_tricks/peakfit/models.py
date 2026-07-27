@@ -5,40 +5,36 @@ with uncertainties.
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Optional, List
-from uncertainties import ufloat # type: ignore
+from uncertainties import ufloat, UFloat # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 
-class PeakFitterResult:
+@dataclass
+class PeakFitResult:
     """
     Class to hold the results of a peak fitting operation.
     
     Attributes
     ----------
-    area : ufloat
-        Area of the fitted peak in counts
-    centroid : ufloat
-        Centroid of the peak in keV
-    amplitude : ufloat
-        Amplitude of the peak in counts
-    sigma : ufloat
-        Standard deviation of the Gaussian fit in keV
-
-    Methods
-    -------
-    __repr__():
-        String representation of the result object.
+    area : UFloat
+        Area of the fitted peak in counts (amplitude / energy bin width)
+    centroid : UFloat
+        Centroid of the peak (mu)
+    amplitude : UFloat
+        Amplitude of the peak in counts times energy (A)
+    sigma : UFloat
+        Standard deviation of the Gaussian fit (sigma)
     """
-    def __init__(self, area: ufloat, centroid: ufloat,
-                 start_time: datetime, real_time: float, live_time: float,
-                 amplitude: ufloat, sigma: ufloat, figure: Optional[plt.Figure] = None):
-        self.area = area
-        self.centroid = centroid
-        self.start_time = start_time
-        self.real_time = real_time
-        self.live_time = live_time
-        self.amplitude = amplitude
-        self.sigma = sigma
-        self.figure = figure
+
+    area: UFloat
+    centroid: UFloat
+    amplitude: UFloat
+    sigma: UFloat
+
+    start_time: datetime
+    real_time: float
+    live_time: float
+
+    figure: Optional[plt.Figure] = None
 
 
 @dataclass
@@ -67,14 +63,14 @@ class SpectrometryData:
         counts_in_markers (int): Sum of counts recorded within the ROI
             `[left_marker, right_marker]`.
         energy_coefficients (List[float]): Polynomial calibration constants
-            $[A_0, A_1, \dots, A_n]$ mapping channel $n$ to energy $E$ via
-            $$E = \sum A_i \cdot n^i$$. Defaults to an empty list.
+            [A_0, A_1, ..., A_n] mapping channel n to energy E via
+            E = sum A_i * n^i. Defaults to an empty list.
         shape_coefficients (List[float]): Parameters defining peak resolution and
             tailing functions (FWHM and Low Tail parameters). Defaults to an
             empty list.
         energy_unit (str): Unit of energy measurement (e.g., "keV", "MeV").
             Defaults to "keV".
-        channels (List[int]): List of channel index numbers ($n$). Defaults to an
+        channels (List[int]): List of channel index numbers (n). Defaults to an
             empty list.
         energy (List[float]): Calibrated energy values corresponding to each
             channel. Defaults to an empty list.
