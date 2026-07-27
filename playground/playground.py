@@ -37,15 +37,22 @@ from mapp_tricks.peakfit import PeakFitter
 
 # test new peakfit parser
 
-from mapp_tricks.peakfit import parse_spectrum_file
+from mapp_tricks.peakfit import parse_spectrum_file, sum_spectra_in_folder
 
 
-from_cnf = parse_spectrum_file('./data/spectra_test_data/original_cnf_file.cnf')
-from_cnfconv = parse_spectrum_file('./data/spectra_test_data/cnfconv_converted_file.txt')
-from_interspect = parse_spectrum_file('./data/spectra_test_data/InterSpec_converted_file.txt')
+# from_cnf = parse_spectrum_file('./data/spectra_test_data/original_cnf_file.cnf')
+# from_cnfconv = parse_spectrum_file('./data/spectra_test_data/cnfconv_converted_file.txt')
+# from_interspect = parse_spectrum_file('./data/spectra_test_data/InterSpec_converted_file.txt')
 
-# store each of with .write_to_file() to a new file and compare the outputs
+# # store each of with .write_to_file() to a new file and compare the outputs
 
-from_cnf.write_to_file('./data/spectra_test_data/output_from_cnf.txt')
-from_cnfconv.write_to_file('./data/spectra_test_data/output_from_cnfconv.txt')
-from_interspect.write_to_file('./data/spectra_test_data/output_from_interspect.txt')
+# from_cnf.write_to_file('./data/spectra_test_data/output_from_cnf.txt')
+# from_cnfconv.write_to_file('./data/spectra_test_data/output_from_cnfconv.txt')
+# from_interspect.write_to_file('./data/spectra_test_data/output_from_interspect.txt')
+
+
+sum_spectra_in_folder(
+    folder_path="/home/lars/kDrive/uni/phd/projects/dineutron/cs_ana/enrMo100/data/t7A/spectra/raw/10min",
+    group_size=5,
+    prefix="sum5"
+)

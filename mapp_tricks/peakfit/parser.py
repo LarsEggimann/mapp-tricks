@@ -42,6 +42,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
 
     # --- Initialize Defaults ---
     sample_name = os.path.basename(filepath)
+    original_file_name = sample_name
     sample_id = ""
     sample_type = ""
     user_name = ""
@@ -61,7 +62,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
     energy_unit = "keV"
     
     channels = []
-    energys = []
+    energies = []
     counts = []
 
     if path.endswith(".cnf") or path.endswith(".CNF"):
@@ -73,6 +74,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
         sample_type = str(res.get("Sample type", sample_type))
         user_name = str(res.get("User name", user_name))
         sample_description = str(res.get("Sample description", sample_description))
+        original_file_name = str(res.get("Original File Name", original_file_name))
 
         if "Start time" in res:
             start_time = datetime.strptime(res["Start time"], "%d-%m-%Y, %H:%M:%S")
@@ -91,7 +93,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
         energy_unit = res.get("Energy unit", energy_unit)
 
         channels = res.get("Channels", [])
-        energys = res.get("Energy", [])
+        energies = res.get("Energy", [])
         counts = res.get("Channels data", [])
             
     elif path.endswith(".txt"):
@@ -175,7 +177,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
 
         # Extract lists from dataframe
         channels = df["channel"].astype(int).tolist()
-        energys = df["energy"].astype(float).tolist()
+        energies = df["energy"].astype(float).tolist()
         counts = df["counts"].astype(int).tolist()
 
         if total_parsed is not None:
@@ -204,8 +206,9 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
         shape_coefficients=shape_coefficients,
         energy_unit=energy_unit,
         channels=channels,
-        energy=energys,
-        channels_data=counts
+        energy=energies,
+        channels_data=counts,
+        original_file_name=original_file_name
     )
 
 def _load_spectra_from_files(file_paths: list[str]) -> list[SpectrometryData]:

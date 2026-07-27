@@ -5,38 +5,27 @@ This module provides the main PeakFitter class and related functions
 for fitting Gaussian peaks with linear backgrounds.
 """
 
-from dataclasses import dataclass, field
 import os
 import glob
-from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
-from typing import Dict, List, Tuple, Optional, Union
+from typing import List, Tuple
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd # type: ignore
-from uncertainties import ufloat # type: ignore
 from uncertainties import unumpy as unp # type: ignore
 import uncertainties as unc # type: ignore
 from tqdm.auto import tqdm # type: ignore
 from scipy.optimize import curve_fit # type: ignore
+import matplotlib.pyplot as plt # type: ignore
 
+from .plotting import plot_matplotlib
 from .parser import parse_spectrum_file
-from .models import PeakFitResult, SpectrometryData
-
-def linear_func(x, m, b):
-    """Linear function: y = mx + b"""
-    return m * x + b
-
-def gaussian_func(x, amp, center, sigma):
-    """Gaussian function"""
-    return (amp / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - center) ** 2) / (2 * sigma ** 2))
-
-def linear_gaussian_model(x, m, b, amp, center, sigma):
-    """Combined linear and Gaussian model."""
-    return linear_func(x, m, b) + gaussian_func(x, amp, center, sigma)
+from .models import PeakFitResult, SpectrometryData, linear_gaussian_model
 
 class PeakFitter:
     """
-    A class for fitting Gaussian peaks with linear backgrounds in spectroscopy data.
+    A class for fitting gaussian peaks with linear backgrounds in spectroscopy data.
     
     This class provides methods to fit peaks in a specified energy range,
     extract peak parameters, and process multiple files in batch.
@@ -51,7 +40,7 @@ class PeakFitter:
     def __init__(self, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
         self.timezone: ZoneInfo = timezone
     
-    def fit_peak(self, spectra_data: SpectrometryData, energy_range: Tuple[float, float]) -> Dict:
+    def fit_peak(self, spectra_data: SpectrometryData, energy_range: Tuple[float, float]) -> PeakFitResult:
         """
         Fit a Gaussian peak with linear background in the specified energy range.
         
@@ -59,17 +48,13 @@ class PeakFitter:
         ----------
         spectra_data : SpectrometryData
             Dataclass containing spectrum information
-        energy_range : tuple
+        energy_range : tuple[float, float]
             (min_energy, max_energy) for the fitting range
-        background_params : dict, optional
-            Initial parameters for background fit {'intercept': value, 'slope': value}
-        gaussian_params : dict, optional
-            Initial parameters for Gaussian fit {'center': value, 'sigma': value}
-            
+        
         Returns
         -------
-        dict
-            Dictionary containing fit results and parameters
+        PeakFitResult
+            Dataclass containing the fit results and parameters
         """
         # assert that energy_range is a tuple of two floats
         assert isinstance(energy_range, tuple) and len(energy_range) == 2, f"energy_range must be a tuple of two values, got {energy_range}"
@@ -82,38 +67,41 @@ class PeakFitter:
         x = energy_arr[mask]
         y = counts_arr[mask]
 
-        # x and y are your data arrays
-        popt, pcov = curve_fit(linear_gaussian_model, x, y, p0=[0, 0, np.sum(y), x[np.argmax(y)], 0.9])
+        # try decrease fit convergence time by providing somewhat reasonable initial guesses for the parameters
+        m_0 = 0 
+        b_0 = np.mean(y)
+        amp_0 = np.max(y) * (x[1] - x[0])
+        mu_0 = energy_range[0] + (energy_range[1] - energy_range[0]) / 2
+        sigma_0 = (energy_range[1] - energy_range[0]) / 6
+        popt, pcov = curve_fit(linear_gaussian_model, x, y, p0=[m_0, b_0, amp_0, mu_0, sigma_0])
 
-        # use uncertanties package to convert popt and pcov and preserve corralated uncertainties
+        # use uncertainties package to convert popt and pcov and preserve correlated uncertainties
         cv_u = unc.correlated_values(popt, pcov)
 
-        slope, intercept, amp, center, sigma = cv_u
+        m, b, amp, mu, sigma = cv_u
 
         # Calculate area with uncertainty
         area = amp / (x[1] - x[0])
 
-        return {
-            "area": area.n,
-            "area_err": area.s,
-            "centroid": center.n,
-            "centroid_err": center.s,
-            "amplitude": amp.n,
-            "amplitude_err": amp.s,
-            "sigma": sigma.n,
-            "sigma_err": sigma.s,
-            "x": x,
-            "y": y,
-            "energy_range": energy_range,
-            "slope": slope.n,
-            "slope_err": slope.s,
-            "intercept": intercept.n,
-            "intercept_err": intercept.s,
-        }
+        return PeakFitResult(
+            area=area,
+            mu=mu,
+            amp=amp,
+            sigma=sigma,
+            m=m,
+            b=b,
+            energy_range=energy_range,
+            energy_bins=x,
+            counts=y,
+            file_name=spectra_data.original_file_name,
+            start_time=spectra_data.start_time,
+            real_time=spectra_data.real_time,
+            live_time=spectra_data.live_time
+        )
     
     def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: str | None = None) -> PeakFitResult:
         """
-        Process a single spectrum file.
+        Process a single spectrum file. This is a convenience method that wraps around process_folder to handle a single file by extracting the parent folder and file name.
 
         Parameters
         ----------
@@ -126,8 +114,8 @@ class PeakFitter:
 
         Returns
         -------
-        dict
-            Dictionary containing fit results and parameters
+        PeakFitResult
+            Fit result for the processed file
         """
         
         parent_folder = os.path.dirname(filepath)
@@ -140,8 +128,6 @@ class PeakFitter:
             folder_path=parent_folder,
             energy_range=energy_range,
             output_dir=output_dir,
-            save_plots=True,
-            save_plotly=False,
             file_pattern=file_name,
         )
 
@@ -150,62 +136,67 @@ class PeakFitter:
 
         return res[0]
     
-    def process_file_multiple_peaks(self, filepath: str, energy_ranges: List[Tuple[float, float]], output_dir: str | None = None) -> List[PeakFitResult]:
+    def process_file_multiple_peaks(
+            self,
+            filepath: str,
+            energy_ranges: List[Tuple[float, float]],
+            output_dir: str | None = None
+            ) -> list[Tuple[Tuple[float, float], PeakFitResult]]:
         """
-        Process a single spectrum file for multiple peaks.
+        Process a single spectrum file for multiple peaks, useful for calibrations and isotopes with multiple peaks.
+        Here I just wrap around process_folder to handle a single file by extracting the parent folder and file name.
 
         Parameters
         ----------
         filepath : str
             Path to the spectrum file
         energy_ranges : list of tuple
-            List of (min_energy, max_energy) for the fitting ranges
+            List of (min_energy, max_energy) for the fitting ranges for each peak
+        output_dir : str, optional
+            Directory to save output files
 
         Returns
         -------
-        list of PeakFitResult
-            List containing fit results for each peak
+        list of Tuple[Tuple[float, float], PeakFitResult]
+            List containing the tuple of energy range and fit result for each processed peak
         """
 
         # make sure file and parent folder exist
         filepath = os.path.abspath(filepath)
-        if not os.path.exists(filepath):
-            raise FileNotFoundError(f"File does not exist: {filepath}")
         parent_folder = os.path.dirname(filepath)
         if not os.path.exists(parent_folder):
             raise FileNotFoundError(f"Parent folder does not exist: {parent_folder}")
-        
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File does not exist: {filepath}")
         file_name = os.path.basename(filepath)
 
         if output_dir is None:
             output_dir = os.path.join(parent_folder, "results")
 
-        all_results = []
+        results: list[Tuple[Tuple[float, float], PeakFitResult]] = []
 
         for energy_range in tqdm(energy_ranges, desc="peakfit - processing energy ranges"):
-            res = self.process_folder(
+            pf_res = self.process_folder(
                 folder_path=parent_folder,
                 energy_range=energy_range,
                 output_dir=output_dir,
                 save_plots=True,
-                save_plotly=False,
+                save_results=False, # we set this to False to not create a CSV for each peak
+                verbose=False, # we don't want to show progress and prints for each peak since we already have a progress bar for the energy ranges
                 file_pattern=file_name,
-                process_multiple_peaks=True,
-            )
-            all_results.append(res[0])
+            )[0]  # we expect exactly one result for each energy range, so we take the first element
 
-        # store a csv summary of all peaks
+            results.append((energy_range, pf_res))
+        return results
 
-
-        return all_results
-
-    def process_folder(self, folder_path: str, energy_range: Tuple[float, float],
-                      output_dir: str | None = None,
-                      save_plots: bool = True,
-                      save_plotly: bool = False,
-                      file_pattern: str = "*.cnf",
-                      process_multiple_peaks:bool = False,
-                      ) -> list[PeakFitResult]:
+    def process_folder(self,
+                        folder_path: str, energy_range: Tuple[float, float],
+                        output_dir: str | None = None,
+                        save_plots: bool = True,
+                        save_results: bool = True,
+                        verbose: bool = True,
+                        file_pattern: str = "*.cnf",
+                    ) -> list[PeakFitResult]:
         """
         Process all spectrum files in a folder.
         
@@ -213,23 +204,23 @@ class PeakFitter:
         ----------
         folder_path : str
             Path to folder containing spectrum files
-        energy_range : tuple
+        energy_range : tuple[float, float]
             (min_energy, max_energy) for the fitting range
         output_dir : str, optional
             Directory to save results. If None, uses folder_path/results
         save_plots : bool, default True
             Whether to save matplotlib plots
-        save_plotly : bool, default False
-            Whether to save interactive plotly plots
+        save_results : bool, default True
+            Whether to save fit results to CSV
         file_pattern : str, default "*.cnf"
             File pattern to match
 
         Returns
         -------
-        pd.DataFrame
-            DataFrame containing all fit results
+        list[PeakFitResult]
+            List containing all fit results
         """
-        from .plotting import plot_matplotlib, plot_plotly
+        
         
         # Find files
         # if cnf or CNF look for both
@@ -253,79 +244,67 @@ class PeakFitter:
                 return (1, basename)
             
         files = sorted(files, key=sort_key)
-
-        if not process_multiple_peaks:
-            print(f"peakfit - found {len(files)} files to process.")
         
         if not files:
             raise ValueError(f"No files found matching pattern '{file_pattern}' in {folder_path}")
         
         # Set up output directory
         if output_dir is None:
-            output_dir = os.path.join(folder_path, "results")
+            output_dir = os.path.join(folder_path, "mapp_tricks_results")
         
         if save_plots:
-            plots_dir = os.path.join(output_dir, "peakfit_fits")
+            plots_dir = os.path.join(output_dir, "peakfit_plot_fits")
             os.makedirs(plots_dir, exist_ok=True)
         
-        results = []
+        results: list[tuple[str, PeakFitResult]] = []
 
-        return_results = []
         
-        # Process files
-        for file in tqdm(files, desc="peakfit - processing files", disable=process_multiple_peaks):
+        # process files first
+        for file in tqdm(files, desc="peakfit - processing files", disable=not verbose):
             try:
-                # Parse file
                 sd = parse_spectrum_file(file, timezone=self.timezone)
-                # Fit peak
-                res = self.fit_peak(sd, energy_range)
-                res["filename"] = file
-                res["calibration"] = sd.energy_coefficients
-                res["start_time"] = sd.start_time
-                res["real_time"] = sd.real_time
-                res["live_time"] = sd.live_time
+                pf_res = self.fit_peak(sd, energy_range)
 
-                results.append(res)
+                results.append((file, pf_res))
 
-                
-                # Save plots
-                plots_base_filename = f"{os.path.basename(file)}_{int(res["centroid"])}keV"
-                fig = None
-                if save_plots:
-                    fig = plot_matplotlib(res, save_path=os.path.join(plots_dir, f"{plots_base_filename}.pdf"))
-                return_results.append(PeakFitResult(
-                    area=ufloat(res["area"], res["area_err"]),
-                    centroid=ufloat(res["centroid"], res["centroid_err"]),
-                    start_time=sd.start_time,
-                    real_time=sd.real_time,
-                    live_time=sd.live_time,
-                    amplitude=ufloat(res["amplitude"], res["amplitude_err"]),
-                    sigma=ufloat(res["sigma"], res["sigma_err"]),
-                    figure=fig
-                ))
-                
-                if save_plotly:
-                    plot_plotly(res, sd, save_path=os.path.join(plots_dir, f"{plots_base_filename}.html"))
-                
             except Exception as e:
                 print(f"Error processing {file}: {e}")
                 continue
-        
-        # Convert to DataFrame and save
-        results_df = pd.DataFrame(results)
-        if results_df.empty:
-            print("Warning: Result Dataframe is empty. No files were successfully processed. Check input.")
-            return return_results
-        
-        # Remove complex objects for CSV export
-        csv_results = results_df.drop(columns=['fit_params', 'x', 'y', 'fit_result', 'calibration'], 
-                                     errors='ignore')
-        
-        os.makedirs(output_dir, exist_ok=True)
-        if not process_multiple_peaks:
-            mean_float = unp.nominal_values(results_df.centroid.mean())
-            file_name = f'{int(mean_float)}keV_peakfit_results.csv'
-            csv_results.to_csv(os.path.join(output_dir, file_name), index=False)
+
+        # helper to save plots in parallel
+        def save_peak_plot(args: tuple[str, PeakFitResult]) -> None:
+            file, pf_res = args
+
+            plots_base_filename = ( f"{Path(file).name}_{int(pf_res.mu.n)}keV" )
+
+            plot_matplotlib(
+                pf_res,
+                save_path=os.path.join(plots_dir, f"{plots_base_filename}.pdf")
+            )
+
+        # start saving plots in parallel using ThreadPoolExecutor
+        if save_plots:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                list(
+                    tqdm(
+                        executor.map(save_peak_plot, results),
+                        total=len(results),
+                        desc="peakfit - saving plots using ThreadPoolExecutor",
+                        disable=not verbose
+                    )
+                )
+
+        # get first mu value to use in the output filename
+        peakfit_results = [res for _, res in results]
+        first_mu = int(peakfit_results[0].mu.n) if peakfit_results else 'XX'
+        file_name = f'{first_mu}keV_peakfit_results.csv'
+
+        # convert results to DataFrame and save to CSV
+        if save_results:
+            os.makedirs(output_dir, exist_ok=True)
+            df = pd.DataFrame([res.to_dict() for res in peakfit_results])
+            df.to_csv(os.path.join(output_dir, file_name), index=False)
+
+        if verbose:
             print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/{file_name}")
-        
-        return return_results
+        return peakfit_results

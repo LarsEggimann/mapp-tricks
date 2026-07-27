@@ -4,38 +4,123 @@ with uncertainties.
 """
 from datetime import datetime
 from dataclasses import dataclass, field
-from typing import Optional, List
-from uncertainties import ufloat, UFloat # type: ignore
-import matplotlib.pyplot as plt # type: ignore
+from typing import List
+import numpy as np
+from uncertainties import UFloat, ufloat # type: ignore
+
+
+def linear_func(x, m, b):
+    """Linear function: y = mx + b"""
+    return m * x + b
+
+def gaussian_func(x, amp, center, sigma):
+    """Gaussian function"""
+    return (amp / (sigma * np.sqrt(2 * np.pi))) * np.exp(-((x - center) ** 2) / (2 * sigma ** 2))
+
+def linear_gaussian_model(x, m, b, amp, center, sigma):
+    """Combined linear and Gaussian model."""
+    return linear_func(x, m, b) + gaussian_func(x, amp, center, sigma)
 
 @dataclass
 class PeakFitResult:
     """
-    Class to hold the results of a peak fitting operation.
+    Class to hold the results of a peak fitting operation according to a linear + gaussian model.
+
+    f(E) = (m * E + b) + (amp / (sigma * sqrt(2 * pi))) * exp(-((E - mu) ** 2) / (2 * sigma ** 2))
     
     Attributes
     ----------
     area : UFloat
-        Area of the fitted peak in counts (amplitude / energy bin width)
-    centroid : UFloat
-        Centroid of the peak (mu)
-    amplitude : UFloat
-        Amplitude of the peak in counts times energy (A)
+        Area of the fitted peak [counts] (amplitude / energy bin width)
+    mu : UFloat
+        Centroid of the peak [energy]
+    amp : UFloat
+        Amplitude of the peak [counts * energy]
     sigma : UFloat
-        Standard deviation of the Gaussian fit (sigma)
+        Standard deviation of the Gaussian fit [energy]
+    m : UFloat
+        Slope of the linear background [counts / energy]
+    b : UFloat
+        Intercept of the linear background [counts]
+    energy_range : tuple[float, float]
+        Tuple of (min_energy, max_energy) defining the fitting range for the peak (useful for plotting)
+    energy_bins : np.ndarray | None
+        Optional array of energy bin edges corresponding to the spectrum data (used for plotting)
+    counts : np.ndarray | None
+        Optional array of count values corresponding to the spectrum data (used for plotting)
+    start_time : datetime
+        Start time of the measurement, metadata from the spectrum file
+    real_time : float
+        Real time of the measurement [seconds], metadata from the spectrum file
+    live_time : float
+        Live time of the measurement [seconds], metadata from the spectrum file
+    figure : go.Figure | None
+        Optional plotly figure of the peak fit, if generated.
     """
 
     area: UFloat
-    centroid: UFloat
-    amplitude: UFloat
+    mu: UFloat
+    amp: UFloat
     sigma: UFloat
+    m: UFloat
+    b: UFloat
+    energy_range: tuple[float, float]
+    energy_bins: np.ndarray
+    counts: np.ndarray
 
+    file_name: str
     start_time: datetime
     real_time: float
     live_time: float
 
-    figure: Optional[plt.Figure] = None
+    def to_dict(self) -> dict[str, object]:
+        """Convert to a dictionary suitable for a pandas DataFrame. Here I drop the energy_bins and counts arrays to avoid serialization issues."""
+        return {
+            "area": self.area.n,
+            "area_err": self.area.s,
+            "mu": self.mu.n,
+            "mu_err": self.mu.s,
+            "amp": self.amp.n,
+            "amp_err": self.amp.s,
+            "sigma": self.sigma.n,
+            "sigma_err": self.sigma.s,
+            "m": self.m.n,
+            "m_err": self.m.s,
+            "b": self.b.n,
+            "b_err": self.b.s,
+            "energy_range_min": self.energy_range[0],
+            "energy_range_max": self.energy_range[1],
+            "file_name": self.file_name,
+            "start_time": self.start_time.isoformat(),
+            "real_time": self.real_time,
+            "live_time": self.live_time,
+        }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> "PeakFitResult":
+        """Create a PeakFitResult from a dictionary."""
+        return cls(
+            area=ufloat(data["area"], data["area_err"]),
+            mu=ufloat(data["mu"], data["mu_err"]),
+            amp=ufloat(data["amp"], data["amp_err"]),
+            sigma=ufloat(data["sigma"], data["sigma_err"]),
+            m=ufloat(data["m"], data["m_err"]),
+            b=ufloat(data["b"], data["b_err"]),
+
+            energy_range=(
+                float(data["energy_range_min"]),
+                float(data["energy_range_max"]),
+            ),
+
+            # Not stored in CSV
+            energy_bins=np.array([]),
+            counts=np.array([]),
+
+            file_name=str(data["file_name"]),
+            start_time=datetime.fromisoformat(str(data["start_time"])),
+            real_time=float(data["real_time"]),
+            live_time=float(data["live_time"]),
+        )
 
 @dataclass
 class SpectrometryData:
@@ -101,6 +186,8 @@ class SpectrometryData:
     energy: List[float] = field(default_factory=list)
     channels_data: List[int] = field(default_factory=list)
 
+    original_file_name: str = ""
+
     def write_to_file(self, filename: str) -> None:
         """Write sample dataclass data to a text file in InterSpec format.
 
@@ -117,7 +204,7 @@ class SpectrometryData:
         detector = self.user_name if self.user_name else "Unknown"
         remark = self.sample_description if self.sample_description else "None"
 
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write(f'Original File Name: {filename}\n')
             f.write(f'TotalGammaLiveTime: {self.live_time} seconds\n')
             f.write(f'TotalRealTime: {self.real_time} seconds\n')
@@ -149,7 +236,7 @@ class SpectrometryData:
         """
         start_time_str = self.start_time.strftime('%Y-%m-%d %H:%M:%S')
 
-        with open(filename, 'w') as f:
+        with open(filename, 'w', encoding='utf-8') as f:
             f.write('#\n')
             f.write(f'# Sample name: {self.sample_name}\n')
             f.write('\n')

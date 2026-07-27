@@ -6,33 +6,24 @@ for visualizing peak fits and spectra.
 """
 
 import os
-from typing import Optional, Tuple
-import numpy as np # type: ignore
-import pandas as pd # type: ignore
+from typing import Tuple
 import matplotlib.pyplot as plt # type: ignore
 import plotly.graph_objects as go # type: ignore
 
-from mapp_tricks.peakfit.models import SpectrometryData
+from .models import PeakFitResult, linear_func, gaussian_func
 
-def linear_func(x: np.ndarray, m: float, b: float):
-    """Linear function: y = mx + b"""
-    return m * x + b
-
-
-def gaussian_func(x: np.ndarray, amp: float, center: float, sigma: float):
-    """Gaussian function"""
-    return amp / (sigma * np.sqrt(2 * np.pi)) * np.exp(-((x - center) ** 2) / (2 * sigma ** 2))
-
-
-def plot_matplotlib(res: dict, save_path: Optional[str] = None, 
-                   figsize: Tuple[float, float] = (10, 6)) -> plt.Figure:
+def plot_matplotlib(
+        peakfit_result: PeakFitResult,
+        save_path: str, 
+        figsize: Tuple[float, float] = (10, 6)
+        ):
     """
     Create a matplotlib plot of the peak fit.
     
     Parameters
     ----------
-    res : dict
-        Results dictionary from peak fitting
+    peakfit_result : PeakFitResult
+        Result object from peak fitting
     save_path : str, optional
         Path to save the plot. If None, shows the plot
     figsize : tuple, default (10, 6)
@@ -41,149 +32,39 @@ def plot_matplotlib(res: dict, save_path: Optional[str] = None,
     fig = plt.figure(figsize=figsize)
     
     # Plot the spectrum
-    plt.plot(res['x'], res['y'], label='Spectrum', color='black', drawstyle='steps-mid')
+    x = peakfit_result.energy_bins
+    y = peakfit_result.counts
+
+    plt.plot(x, y, label='Spectrum', color='black', drawstyle='steps-mid')
     
-    # Plot the background fit
-    linear_y = linear_func(res['x'], 
-                          res['slope'], 
-                          res['intercept'])
-    plt.plot(res['x'], linear_y, label='Background Fit', color='red')
+    # background fit
+    linear_y = linear_func(x, peakfit_result.m.n, peakfit_result.b.n)
+    plt.plot(x, linear_y, label='Background Fit', color='red')
     
-    # Plot the Gaussian fit
-    gauss_y = gaussian_func(res['x'],
-                           res['amplitude'], 
-                           res['centroid'],
-                           res['sigma'])
-    plt.plot(res['x'], linear_y + gauss_y, label='Total Fit', color='blue')
+    # gaussian fit
+    gauss_y = gaussian_func(x, peakfit_result.amp.n, peakfit_result.mu.n, peakfit_result.sigma.n)
+    plt.plot(x, linear_y + gauss_y, label='Total Fit', color='blue')
     
-    # Add centroid line
-    plt.axvline(x=res['centroid'], color='green', linestyle='--', 
-                label=f'Centroid: {res["centroid"]:.2f} keV')
+    # centroid line
+    plt.axvline(x=peakfit_result.mu.n, color='green', linestyle='--', 
+                label=f'Centroid: {peakfit_result.mu:.uS} keV')
     
     # Add area text
-    area_text = f"Area: {res['area']:.2f} ± {res['area_err']:.2f}"
+    area_text = f"Area: {peakfit_result.area:.uS} counts"
     plt.text(0.05, 0.95, area_text, transform=plt.gca().transAxes, 
              fontsize=12, verticalalignment='top', 
              bbox=dict(facecolor='white', alpha=0.5))
     
     # Labels and formatting
-    filename = os.path.basename(res.get('filename', 'Unknown'))
-    plt.title(f"Peak fit for: {filename} - {int(res['centroid'])} keV")
-    plt.xlabel("Energy (keV)")
+    filename = os.path.basename(peakfit_result.file_name)
+    plt.title(f"Peak fit for: {filename} at {peakfit_result.mu:.uS} keV")
+    plt.xlabel("Energy [keV]")
     plt.ylabel("Counts")
     plt.yscale('log')
     plt.legend()
     plt.grid(True)
     
-    # Save or show
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
-    else:
-        plt.show()
-    
-    return fig
+    # save no show
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
 
-
-def plot_plotly(res: dict, spectrometry_data: SpectrometryData, 
-               range_x: Optional[Tuple[float, float]] = None,
-               range_y: Optional[Tuple[float, float]] = None,
-               save_path: Optional[str] = None) -> None:
-    """
-    Create an interactive plotly plot of the peak fit.
-    
-    Parameters
-    ----------
-    res : dict
-        Results dictionary from peak fitting
-    spectrometry_data : SpectrometryData
-        Spectrometry data object
-    range_x : tuple, optional
-        X-axis range (min, max)
-    range_y : tuple, optional
-        Y-axis range (min, max) - will be converted to log scale
-    save_path : str, optional
-        Path to save HTML file. If None, shows the plot
-    """
-    
-    # Create the main figure
-    fig = go.Figure()
-    
-    # Add spectrum data
-    fig.add_trace(go.Scatter(
-        x=spectrometry_data.energy, 
-        y=spectrometry_data.channels_data,
-        mode='lines',
-        name='Spectrum',
-        line=dict(color='black', shape='hv'),  # hv creates step-like appearance
-        hovertemplate='Energy: %{x:.2f} keV<br>Counts: %{y}<extra></extra>'
-    ))
-
-    # Calculate fit components
-    linear_y = linear_func(res['x'], 
-                          res['slope'], 
-                          res['intercept'])
-    gauss_y = gaussian_func(res['x'],
-                           res['amplitude'], 
-                           res['centroid'],
-                           res['sigma'])
-    
-    # Add background fit
-    fig.add_trace(go.Scatter(
-        x=res['x'], 
-        y=linear_y,
-        mode='lines',
-        name='Background Fit',
-        line=dict(color='red'),
-        hovertemplate='Energy: %{x:.2f} keV<br>Background: %{y:.2f}<extra></extra>'
-    ))
-    
-    # Add total fit
-    fig.add_trace(go.Scatter(
-        x=res['x'], 
-        y=linear_y + gauss_y,
-        mode='lines',
-        name='Total Fit',
-        line=dict(color='blue'),
-        hovertemplate='Energy: %{x:.2f} keV<br>Total Fit: %{y:.2f}<extra></extra>'
-    ))
-    
-    # Add centroid vertical line
-    fig.add_vline(
-        x=res['centroid'], 
-        line_color='green',
-        line_dash='dash',
-        annotation_text=f"Centroid: {res['centroid']:.2f} keV",
-        annotation_position="top"
-    )
-
-    # Update layout
-    filename = os.path.basename(res.get('filename', 'Unknown'))
-    fig.update_layout(
-        title=f"Gaussian + Linear Background Fit, file: {filename}",
-        xaxis_title="Energy (keV)",
-        yaxis_title="Counts (log scale)",
-        hovermode='x unified',
-        showlegend=True,
-        height=800,
-        template='plotly_white'
-    )
-    
-    # Add grid and set log scale for y-axis
-    max_counts = max(spectrometry_data.channels_data)
-    log_max = np.log10(max_counts) + 0.5  # Add some padding
-    fig.update_yaxes(
-        type="log",
-        range=[0, log_max],
-    )
-
-    if range_x:
-        fig.update_xaxes(range=range_x)
-    if range_y:
-        fig.update_yaxes(range=np.log10(range_y))
-
-    # Save or show
-    if save_path:
-        fig.write_html(save_path)
-    else:
-        fig.show()
