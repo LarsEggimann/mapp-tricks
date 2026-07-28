@@ -1,13 +1,11 @@
-import os, ast
+import ast
 from pathlib import Path
 from typing_extensions import Literal
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
-from scipy.optimize import curve_fit # type: ignore
 import uncertainties # type: ignore
-from uncertainties import ufloat, UFloat, unumpy as unp, Variable # type: ignore
+from uncertainties import ufloat, UFloat, Variable # type: ignore
 from uncertainties.umath import exp # type: ignore # pylint: disable=no-name-in-module
-import matplotlib.pyplot as plt # type: ignore
 import plotly.graph_objects as go # type: ignore
 
 from mapp_tricks.plotting import apply_my_plotly_style
