@@ -2,7 +2,7 @@ import os
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
 from scipy.optimize import curve_fit # type: ignore
-from uncertainties import ufloat, unumpy as unp, Variable # type: ignore
+from uncertainties import ufloat, unumpy as unp, Variable, UFloat # type: ignore
 from uncertainties.umath import exp # type: ignore # pylint: disable=no-name-in-module
 import matplotlib.pyplot as plt # type: ignore
 from matplotlib.figure import Figure
@@ -10,7 +10,7 @@ from matplotlib.figure import Figure
 
 def load_calibration_data(level: int, with_aluminum_foil: bool):
     cwd = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(cwd, "calibration-data/HPGe_efficiency_data.csv")
+    path = os.path.join(cwd, "calibration_data/old_data/HPGe_efficiency_data.csv")
     data = pd.read_csv(path)
 
     # filter by level 0-10 and aluminum foil flag
@@ -68,7 +68,7 @@ class FitData:
     def __repr__(self):
         return f"FitData(fit_func={self.fit_func}, fit_params={self.fit_params}, fit_errors={self.fit_errors}, fit_covariance={self.fit_covariance})"
 
-class HPGeCalibration:
+class OldHPGeCalibration:
     def __init__(self, level=0, with_aluminum_foil=False):
         # dataframe with the following columns:
         # level,energy,element,reference_peak_activity,reference_date,half_life,time_measurement_start,measurement_time_active,with_aluminum_foil,net_peak_areas
@@ -160,7 +160,7 @@ class HPGeCalibration:
         plt.savefig(f'HPGe_calibration_fit_{name}.pdf', bbox_inches='tight')
         return figure
 
-    def evaluate_efficiency_at_energy(self, energy) -> ufloat:
+    def evaluate_efficiency_at_energy(self, energy) -> UFloat:
         """
         Evaluate the efficiency at a given energy.
         energy: energy in keV
@@ -183,10 +183,10 @@ class HPGeCalibration:
         print("Fit Parameters:")
         print(self.fit_data.fit_params)
 
-    def get_activity_for_peak_at_start_of_measurement(self, peak_area: ufloat, peak_energy, life_time, real_time, branching_ratio, half_life) -> ufloat:
+    def get_activity_for_peak_at_start_of_measurement(self, peak_area: UFloat, peak_energy, life_time, real_time, branching_ratio, half_life) -> UFloat:
         """
         Calculate the activity for a given peak at the start of measurement.
-        - peak_area: net peak area [#counts], can be a ufloat
+        - peak_area: net peak area [#counts], can be a UFloat
         - peak_energy: energy of the peak [keV], used to calculate the detector efficiency
         - life_time: life time of the measurement [s]
         - real_time: real time of the measurement [s]
@@ -198,9 +198,9 @@ class HPGeCalibration:
 
         return (peak_area / (life_time * efficiency * branching_ratio)) * (decay_constant * real_time) / (1 - exp(-decay_constant * real_time))
 
-    def get_activity_for_peak_at_end_of_beam(self, peak_area: ufloat, peak_energy, life_time, real_time, cooling_time, branching_ratio, half_life) -> ufloat:
+    def get_activity_for_peak_at_end_of_beam(self, peak_area: UFloat, peak_energy, life_time, real_time, cooling_time, branching_ratio, half_life) -> UFloat:
         """
-        Calculate the activity for a given peak at the end of beam. all parameters can be ufloat
+        Calculate the activity for a given peak at the end of beam. all parameters can be UFloat
         - peak_area: net peak area [#counts]
         - peak_energy: energy of the peak [keV], used to calculate the detector efficiency
         - life_time: life time of the measurement [s]

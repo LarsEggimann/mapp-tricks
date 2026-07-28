@@ -1,3 +1,3 @@
-from .HPGe.hpge_calib import HPGeCalibration, FitData
-from .HPGe.hpge_calib_2025 import HPGeCalibration as HPGeCalibration2025
+from .HPGe.old_hpge_calib import OldHPGeCalibration
+from .HPGe.hpge_calib import HPGeCalibration
 from .x_ray.xray_calib import XRayCalibration

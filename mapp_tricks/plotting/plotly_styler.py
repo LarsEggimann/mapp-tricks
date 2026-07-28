@@ -12,7 +12,7 @@ line_color = "#000000"
 text_color = "#000000"
 bg_color = "#FFFFFF"
 
-error_bar_color = convert_color_hex_to_rgba("#3f3f3f7b")
+error_bar_color = convert_color_hex_to_rgba("#3f3f3fcf")
 
 my_plotly_theme.layout.update(
 

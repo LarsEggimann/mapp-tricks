@@ -140,7 +140,8 @@ class PeakFitter:
             self,
             filepath: str,
             energy_ranges: List[Tuple[float, float]],
-            output_dir: str | None = None
+            output_dir: str | None = None,
+            save_plots: bool = True,
             ) -> list[Tuple[Tuple[float, float], PeakFitResult]]:
         """
         Process a single spectrum file for multiple peaks, useful for calibrations and isotopes with multiple peaks.
@@ -180,7 +181,7 @@ class PeakFitter:
                 folder_path=parent_folder,
                 energy_range=energy_range,
                 output_dir=output_dir,
-                save_plots=True,
+                save_plots=save_plots,
                 save_results=False, # we set this to False to not create a CSV for each peak
                 verbose=False, # we don't want to show progress and prints for each peak since we already have a progress bar for the energy ranges
                 file_pattern=file_name,

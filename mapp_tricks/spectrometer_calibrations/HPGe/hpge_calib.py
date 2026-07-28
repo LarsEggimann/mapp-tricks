@@ -1,31 +1,16 @@
-import os
+import os, ast
+from pathlib import Path
+from typing_extensions import Literal
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
 from scipy.optimize import curve_fit # type: ignore
-from uncertainties import ufloat, unumpy as unp, Variable, UFloat # type: ignore
+import uncertainties # type: ignore
+from uncertainties import ufloat, UFloat, unumpy as unp, Variable # type: ignore
 from uncertainties.umath import exp # type: ignore # pylint: disable=no-name-in-module
 import matplotlib.pyplot as plt # type: ignore
-from matplotlib.figure import Figure
+import plotly.graph_objects as go # type: ignore
 
-
-def load_calibration_data(level: int, with_aluminum_foil: bool):
-    cwd = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(cwd, "calibration-data/HPGe_efficiency_data.csv")
-    data = pd.read_csv(path)
-
-    # filter by level 0-10 and aluminum foil flag
-    data = data[(data['level'] == level) & (data['with_aluminum_foil'] == with_aluminum_foil)]
-
-    # create new df with same columns but ufloat where we have errors
-    data['reference_peak_activity'] = data.apply(
-        lambda row: ufloat(row['reference_peak_activity'], row['reference_peak_activity_error']), axis=1)
-    data['net_peak_areas'] = data.apply(
-        lambda row: ufloat(row['net_peak_areas'], row['net_peak_areas_error']), axis=1)
-    data = data.drop(columns=['reference_peak_activity_error', 'net_peak_areas_error'])
-    # convert datetime columns to datetime objects
-    data['reference_date'] = pd.to_datetime(data['reference_date'])
-    data['time_measurement_start'] = pd.to_datetime(data['time_measurement_start'])
-    return data
+from mapp_tricks.plotting import apply_my_plotly_style
 
 # efficiency model: sum of (log(E)/E)**n terms up to n=5
 def efficiency_model(E, a0, a1, a2, a3, a4, a5):
@@ -58,107 +43,81 @@ def get_error_vector(x, cov_beta):
         sigmas.append(sigma[0])  # take the first element since J is 6x1
     return np.array(sigmas)
 
-class FitData:
-    def __init__(self, fit_func, fit_params, fit_errors, fit_covariance):
-        self.fit_func = fit_func
-        self.fit_params = fit_params
-        self.fit_errors = fit_errors
-        self.fit_covariance = fit_covariance
 
-    def __repr__(self):
-        return f"FitData(fit_func={self.fit_func}, fit_params={self.fit_params}, fit_errors={self.fit_errors}, fit_covariance={self.fit_covariance})"
+# create a structure to hold the calibration paths and their associated names
+calibration_data = {
+    "calibration_2026": {
+        "description": "Calibration data for Akimov, no alu foil only, created Janary 2026",
+        "path": Path(__file__).parent / "calibration_data/processed_data/calib_2026/efficiency_calibration_results.csv",
+    }
+}
 
 class HPGeCalibration:
-    def __init__(self, level=0, with_aluminum_foil=False):
-        # dataframe with the following columns:
-        # level,energy,element,reference_peak_activity,reference_date,half_life,time_measurement_start,measurement_time_active,with_aluminum_foil,net_peak_areas
-        self.data = load_calibration_data(level, with_aluminum_foil)
+    def __init__(self,
+                 detector_name: Literal['Akimov', 'Toptunov'],
+                 level: int, calibration_name: Literal["calibration_2026"] = "calibration_2026",
+                 with_aluminum_foil: bool = False
+                 ):
+        self.detector_name = detector_name
         self.level = level
         self.with_aluminum_foil = with_aluminum_foil
+        self.calibration_name = calibration_name
+        self.calibration_path = calibration_data[calibration_name]["path"]
+        self.df_row = self._load_calibration_data()
 
-        # calculate the efficiency
-        self._calculate_efficiency()
-        self.fit_data: FitData = self._fit_curve_fit()
+        self.parameters = self.df_row["parameters"]
+        self.covariance_matrix = self.df_row["covariance_matrix"]
 
-    def _activity_from_peak_area(self, peak_area, d_r, d_m, t_1_2, t_m_a):
-        """
-        Calculate the activity.
-        peak_area: net peak area [#counts]
-        d_r: reference date (datetime)
-        d_m: measurement start date (datetime)
-        t_1_2: half life [s]
-        t_m_a: measurement time in which the detector was active [s]
-        """
+    def _load_calibration_data(self):
 
-        # make sure all the inputs are numpy arrays for vectorized operations
-        peak_area = np.asarray(peak_area)
-        t_1_2 = np.asarray(t_1_2)
-        t_m_a = np.asarray(t_m_a)
-        d_r = np.asarray(d_r)
-        d_m = np.asarray(d_m)
-        t_r = np.asarray(d_m - d_r, dtype='timedelta64[s]').astype(float) # time difference in seconds between measurement start and reference date
+        df = pd.read_csv(self.calibration_path)
+        df = df[(df['detector_name'] == self.detector_name) & (df['level'] == self.level) & (df['with_aluminum_foil'] == self.with_aluminum_foil)]
+        # if the dataframe is empty, raise an error
+        if df.empty:
+            raise ValueError(f"No calibration data found for detector {self.detector_name}, level {self.level}, with_aluminum_foil={self.with_aluminum_foil} in calibration {self.calibration_name}")
 
-        lambda_ = np.log(2) / t_1_2  # decay constant [1/s]
-        return peak_area * lambda_ * np.exp(lambda_ * t_r) / (1 - np.exp(-lambda_ * t_m_a))
+        # there should only be one row for each detector, level and aluminum foil combination
+        if len(df) > 1:
+            raise ValueError(f"Multiple calibration data found for detector {self.detector_name}, level {self.level}, with_aluminum_foil={self.with_aluminum_foil} in calibration {self.calibration_name}")
 
-    def _calculate_efficiency(self):
-        """
-        Calculate the efficiency.
-        """
-        A_m = self._activity_from_peak_area(
-            self.data['net_peak_areas'],
-            self.data['reference_date'],
-            self.data['time_measurement_start'],
-            self.data['half_life'],
-            self.data['measurement_time_active']
+        row = df.iloc[0].copy()
+
+        row["parameters"] = np.array(ast.literal_eval(row["parameters"]))
+        row["covariance_matrix"] = np.array(ast.literal_eval(row["covariance_matrix"]))
+
+        return row
+
+
+    def plot_fit(self, name='') -> go.Figure:
+        x = np.linspace(self.df_row.energy_min, self.df_row.energy_max, 1000)  # keV, energy range for plotting
+        y = efficiency_model(x, *self.parameters)
+        y_err = get_error_vector(x, self.covariance_matrix)
+
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=x,
+            y=y,
+            mode='lines',
+            name='Efficiency fit',
+            line=dict(color='blue', width=2)
+        ))
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([x, x[::-1]]),
+            y=np.concatenate([y - y_err, (y + y_err)[::-1]]),
+            fill='toself',
+            fillcolor='rgba(0,0,255,0.4)',
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo="skip",
+            showlegend=False,
+        ))
+        fig.update_layout(
+            title=f"Efficiency Calibration Fit for {self.detector_name} Level {self.level}",
+            xaxis_title="Energy [keV]",
+            yaxis_title="Efficiency",
         )
-        A_0 = self.data['reference_peak_activity']
-        efficiency = A_m / A_0
-        # add efficiency and its error to the dataframe
-        self.data['efficiency'] = efficiency
-
-    def _fit_curve_fit(self):
-
-        Ey = unp.nominal_values(self.data['energy'])
-        eff = unp.nominal_values(self.data['efficiency'])
-        err_eff = unp.std_devs(self.data['efficiency'])
-
-        # fit the efficiency data using curve_fit
-        popt, pcov = curve_fit(efficiency_model, Ey, eff, sigma=err_eff, absolute_sigma=True, p0=[1, 1, 1, 1, 1, 1])
-
-        return FitData(
-            fit_func=efficiency_model,
-            fit_params=popt,
-            fit_errors=np.diag(pcov),
-            fit_covariance=pcov
-        )
-
-    def plot_fit(self, name='') -> Figure:
-        x = unp.nominal_values(self.data['energy'])
-        y = unp.nominal_values(self.data['efficiency'])
-        y_err = unp.std_devs(self.data['efficiency'])
-
-        beta = self.fit_data.fit_params
-        cov_beta = self.fit_data.fit_covariance 
-
-        x_fit = np.linspace(np.min(x), np.max(x), 500)
-        y_fit = self.fit_data.fit_func(x_fit, *beta)
-        sigmas_fit = get_error_vector(x_fit, cov_beta)
-
-        figure = plt.figure(figsize=(8, 6))
-        plt.errorbar(x, y, yerr=y_err, fmt='o', label='Calibration Data', capsize=3)
-        plt.plot(x_fit, y_fit, 'r-', label='Fit')
-
-        # plot the fit uncertainty
-        plt.fill_between(x_fit, y_fit - sigmas_fit, y_fit + sigmas_fit, color='red', alpha=0.3, label='Fit uncertainty')
-
-        plt.xlabel('Energy [keV]')
-        plt.ylabel('Efficiency')
-        plt.legend()
-        plt.title(f'HPGe Detector Efficiency Fit, level {self.level}, with aluminum foil: {self.with_aluminum_foil}')
-        plt.grid(True)
-        plt.savefig(f'HPGe_calibration_fit_{name}.pdf', bbox_inches='tight')
-        return figure
+        fig = apply_my_plotly_style(fig)
+        return fig
 
     def evaluate_efficiency_at_energy(self, energy) -> UFloat:
         """
@@ -168,10 +127,8 @@ class HPGeCalibration:
         # if the energy is a ufloat, extract the nominal value
         if isinstance(energy, Variable):
             energy = energy.n
-
-        beta = self.fit_data.fit_params
-        efficiency = self.fit_data.fit_func(energy, *beta)
-        error_vector = get_error_vector(np.array([energy]), self.fit_data.fit_covariance)
+        efficiency = efficiency_model(energy, *self.parameters)
+        error_vector = get_error_vector(np.array([energy]), self.covariance_matrix)
         return ufloat(efficiency, error_vector[0])
     
     def print_summary(self):
@@ -179,14 +136,16 @@ class HPGeCalibration:
         Print a summary of the calibration data.
         """
         print("Calibration Data:")
-        print(self.data[['level', 'with_aluminum_foil', 'energy', 'efficiency']])
-        print("Fit Parameters:")
-        print(self.fit_data.fit_params)
+        print(f"Detector: {self.detector_name}")
+        print(f"Level: {self.level}")
+        print(f"With Aluminum Foil: {self.with_aluminum_foil}")
+        params_unc = uncertainties.correlated_values(self.parameters, self.covariance_matrix)
+        print(f"Parameters: {params_unc}")
 
     def get_activity_for_peak_at_start_of_measurement(self, peak_area: UFloat, peak_energy, life_time, real_time, branching_ratio, half_life) -> UFloat:
         """
         Calculate the activity for a given peak at the start of measurement.
-        - peak_area: net peak area [#counts], can be a UFloat
+        - peak_area: net peak area [#counts], can be a ufloat
         - peak_energy: energy of the peak [keV], used to calculate the detector efficiency
         - life_time: life time of the measurement [s]
         - real_time: real time of the measurement [s]
@@ -200,7 +159,7 @@ class HPGeCalibration:
 
     def get_activity_for_peak_at_end_of_beam(self, peak_area: UFloat, peak_energy, life_time, real_time, cooling_time, branching_ratio, half_life) -> UFloat:
         """
-        Calculate the activity for a given peak at the end of beam. all parameters can be UFloat
+        Calculate the activity for a given peak at the end of beam. all parameters can be ufloat
         - peak_area: net peak area [#counts]
         - peak_energy: energy of the peak [keV], used to calculate the detector efficiency
         - life_time: life time of the measurement [s]
