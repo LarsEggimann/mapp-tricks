@@ -3,10 +3,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import uncertainties.unumpy as unp
 from uncertainties import ufloat
+import uncertainties as unc
 from scipy.optimize import curve_fit
 from mapp_tricks.plotting import apply_my_plotly_style
+from plotly.subplots import make_subplots
 
-# FIXME: cleanup this file, improve interface and make it more general for other isotopes, not just Tc99m
+from mapp_tricks.spectrometer_calibrations import HPGeCalibration
+
+# FIXME | TODO: cleanup this file, improve interface and make it more general for other isotopes, not just Tc99m
 
 half_life_99mTc = ufloat(6.0072, 0.0009) * 60 * 60  # type: ignore # 6.0072 hours in seconds
 
@@ -26,6 +30,12 @@ def double_exponential_decay(t, A0_1, half_life_1, A0_2, half_life_2):
 
 def plot_decay_curve_with_fit(spectra_df: pd.DataFrame, target_name: str = "unknown target", show_plot: bool = True):
 
+    # test prints
+    first_date = spectra_df['time'].min()
+    last_date = spectra_df['time'].max()
+    print(f"First date: {first_date}, Last date: {last_date}")
+    print(f"type of first date: {type(first_date)}, type of last date: {type(last_date)}")
+    # convert timezone aware datetime to timestamps
     x_data = spectra_df['time'].apply(lambda x: x.timestamp()).values
     x_offset = x_data.min()
     x_data = x_data - x_offset  # normalize time to start at 0
@@ -43,14 +53,13 @@ def plot_decay_curve_with_fit(spectra_df: pd.DataFrame, target_name: str = "unkn
         absolute_sigma=True
     )
 
-    a0 = ufloat(popt[0], np.sqrt(pcov[0, 0]))
-    fitted_half_life = ufloat(popt[1], np.sqrt(pcov[1, 1]))
+    a0, fitted_half_life = unc.correlated_values(popt, pcov)
+    
     print(f"Fitted parameters: count rate at t0 = {a0:.uS}, fitted half-life = {fitted_half_life/3600:.uS} hours")
     print(f"data acquisition time: {(x_data.max() - x_data.min())/3600:.2f} hours")
     # print(f"Expected half-life: {half_life_99mTc/3600:.uS} hours")
 
     # plot count rate over time and residuals in subplots
-    from plotly.subplots import make_subplots
     
     fig = make_subplots(
         rows=2, cols=1,
@@ -66,10 +75,10 @@ def plot_decay_curve_with_fit(spectra_df: pd.DataFrame, target_name: str = "unkn
     # add decay curve data to first subplot
     fig.add_trace(go.Scatter(
         x=spectra_df.time,
-        y=unp.nominal_values(spectra_df.count_rate),
+        y=y_data,
         error_y=dict(
             type='data',
-            array=unp.std_devs(spectra_df.count_rate),
+            array=y_err,
             visible=True,
         ),
         mode='markers',
@@ -78,7 +87,7 @@ def plot_decay_curve_with_fit(spectra_df: pd.DataFrame, target_name: str = "unkn
     ), row=1, col=1)
 
     # add fitted curve to first subplot
-    t_fit = np.linspace(x_data.min(), x_data.max(), 100)
+    t_fit = np.linspace(x_data.min(), x_data.max(), 500)
     y_fit = exponential_decay(t_fit, *popt)
 
     fig.add_trace(go.Scatter(
@@ -193,7 +202,7 @@ def plot_decay_curve_with_double_exp_fit(spectra_df: pd.DataFrame, target_name: 
     ), row=1, col=1)
 
     # add fitted curve to first subplot
-    t_fit = np.linspace(x_data.min(), x_data.max(), 100)
+    t_fit = np.linspace(x_data.min(), x_data.max(), 500)
     y_fit = double_exponential_decay(t_fit, *popt)
 
     fig.add_trace(go.Scatter(
@@ -304,7 +313,7 @@ def plot_bateman_decay_curve(spectra_df: pd.DataFrame):
     ))
 
     # add fitted curve to plot
-    t_fit = np.linspace(x_data.min(), x_data.max(), 100)
+    t_fit = np.linspace(x_data.min(), x_data.max(), 500)
     y_fit = batemann(t_fit, *popt)
 
     fig.add_trace(go.Scatter(

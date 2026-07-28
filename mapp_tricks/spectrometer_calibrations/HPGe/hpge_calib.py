@@ -53,7 +53,7 @@ calibration_data = {
 class HPGeCalibration:
     def __init__(self,
                  detector_name: Literal['Akimov', 'Toptunov'],
-                 level: int, calibration_name: Literal["calibration_2026"] = "calibration_2026",
+                 level: int, calibration_name: Literal["calibration_2026"],
                  with_aluminum_foil: bool = False
                  ):
         self.detector_name = detector_name

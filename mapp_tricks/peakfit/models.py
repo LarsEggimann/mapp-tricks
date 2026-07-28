@@ -96,32 +96,6 @@ class PeakFitResult:
             "live_time": self.live_time,
         }
 
-    @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "PeakFitResult":
-        """Create a PeakFitResult from a dictionary."""
-        return cls(
-            area=ufloat(data["area"], data["area_err"]),
-            mu=ufloat(data["mu"], data["mu_err"]),
-            amp=ufloat(data["amp"], data["amp_err"]),
-            sigma=ufloat(data["sigma"], data["sigma_err"]),
-            m=ufloat(data["m"], data["m_err"]),
-            b=ufloat(data["b"], data["b_err"]),
-
-            energy_range=(
-                float(data["energy_range_min"]),
-                float(data["energy_range_max"]),
-            ),
-
-            # Not stored in CSV
-            energy_bins=np.array([]),
-            counts=np.array([]),
-
-            file_name=str(data["file_name"]),
-            start_time=datetime.fromisoformat(str(data["start_time"])),
-            real_time=float(data["real_time"]),
-            live_time=float(data["live_time"]),
-        )
-
 @dataclass
 class SpectrometryData:
     """Stores spectrometry sample metadata, calibration data, and channel measurements.

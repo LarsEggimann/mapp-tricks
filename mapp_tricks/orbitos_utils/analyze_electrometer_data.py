@@ -188,7 +188,7 @@ class ElectrometerDataAnalyzer:
         )
 
         # Save the plot as HTML
-        results_path = os.path.join(os.path.dirname(self.path_to_csv), 'results')
+        results_path = os.path.join(os.path.dirname(self.path_to_csv), 'mapp_tricks_results')
         os.makedirs(results_path, exist_ok=True)
         file_name = os.path.basename(self.path_to_csv)
         file_name = os.path.splitext(file_name)[0]

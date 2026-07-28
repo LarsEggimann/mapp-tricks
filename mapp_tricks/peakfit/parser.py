@@ -7,12 +7,12 @@ energy calibration parameters and data.
 
 import os
 import glob
+from zoneinfo import ZoneInfo
 from datetime import datetime
+from pyparsing import Literal
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
-from pyparsing import Literal
 from uncertainties import ufloat # type: ignore
-from zoneinfo import ZoneInfo
 
 from .models import PeakFitResult, SpectrometryData
 from .read_cnf import read_cnf_file
@@ -211,7 +211,7 @@ def parse_spectrum_file(filepath, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
         original_file_name=original_file_name
     )
 
-def _load_spectra_from_files(file_paths: list[str]) -> list[SpectrometryData]:
+def load_spectra_from_files(file_paths: list[str]) -> list[SpectrometryData]:
     """
     Load spectra from a list of file paths.
 
@@ -326,7 +326,7 @@ def sum_spectra_matching_pattern_in_folder(folder_path: str, pattern: str, resul
     print(f"Files: {paths_to_txt}")
     result_file_path = os.path.join(folder_path, result_file_name)
 
-    spectra = _load_spectra_from_files(paths_to_txt)
+    spectra = load_spectra_from_files(paths_to_txt)
 
     return sum_spectra(spectra, result_file_path)
 
@@ -364,7 +364,7 @@ def sum_spectra_in_folder(folder_path: str, file_type: Literal["*.txt", "*.cnf"]
     print(f"Found {len(files)} spectra files in {folder_path}")
 
     # load all the files
-    loaded_spectra = _load_spectra_from_files(files)
+    loaded_spectra = load_spectra_from_files(files)
 
     # sort files according to start_time: datetime
     loaded_spectra.sort(key=lambda x: x.start_time)
@@ -410,25 +410,21 @@ def read_peakfit_results_csv(filepath: str) -> list[PeakFitResult]:
     results:list[PeakFitResult] = []
     try:
         for index, row in df.iterrows():
-            # header: area,area_err,centroid,centroid_err,amplitude,amplitude_err,sigma,sigma_err,energy_range,slope,slope_err,intercept,intercept_err,filename,start_time,real_time,live_time
-
-            area = ufloat(row['area'], row['area_err'])
-            centroid = ufloat(row['centroid'], row['centroid_err'])
-            amplitude = ufloat(row['amplitude'], row['amplitude_err'])
-            sigma = ufloat(row['sigma'], row['sigma_err'])
-            start_time = datetime.fromisoformat(row['start_time'])
-            real_time = float(row['real_time'])
-            live_time = float(row['live_time'])
-
             result = PeakFitResult(
-                area=area,
-                centroid=centroid,
-                start_time=start_time,
-                real_time=real_time,
-                live_time=live_time,
-                amplitude=amplitude,
-                sigma=sigma,
-                figure=None
+                area=ufloat(row['area'], row['area_err']),
+                mu=ufloat(row['mu'], row['mu_err']),
+                amp=ufloat(row['amp'], row['amp_err']),
+                sigma=ufloat(row['sigma'], row['sigma_err']),
+                m=ufloat(row['m'], row['m_err']),
+                b=ufloat(row['b'], row['b_err']),
+                energy_range=(row['energy_range_min'], row['energy_range_max']),
+                file_name=row['file_name'],
+                start_time=datetime.fromisoformat(row['start_time']),
+                real_time=row['real_time'],
+                live_time=row['live_time'],
+
+                counts=np.array([]),     # not stored in CSV, so we initialize as empty array
+                energy_bins=np.array([]) # same
             )
             results.append(result)
     except Exception as e:

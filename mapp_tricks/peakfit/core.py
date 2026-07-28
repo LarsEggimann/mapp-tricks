@@ -8,9 +8,10 @@ for fitting Gaussian peaks with linear backgrounds.
 import os
 import glob
 from pathlib import Path
+import warnings
 from zoneinfo import ZoneInfo
 from typing import List, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 import numpy as np
 import pandas as pd # type: ignore
 from uncertainties import unumpy as unp # type: ignore
@@ -23,6 +24,19 @@ from .plotting import plot_matplotlib
 from .parser import parse_spectrum_file
 from .models import PeakFitResult, SpectrometryData, linear_gaussian_model
 
+def save_peak_plot(args: tuple[str, PeakFitResult, str]) -> None:
+    file, pf_res, plots_dir = args
+
+    plots_base_filename = f"{Path(file).name}_{int(pf_res.mu.n)}keV"
+
+    plot_matplotlib(
+        pf_res,
+        save_path=os.path.join(
+            plots_dir,
+            f"{plots_base_filename}.pdf",
+        ),
+    )
+
 class PeakFitter:
     """
     A class for fitting gaussian peaks with linear backgrounds in spectroscopy data.
@@ -34,12 +48,10 @@ class PeakFitter:
     ----------
     timezone : ZoneInfo
         Timezone of the time strings in the spectrum files, default is "Europe/Zurich". This is used for converting strings to datetime objects.
-    
     """
-    
     def __init__(self, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
         self.timezone: ZoneInfo = timezone
-    
+        
     def fit_peak(self, spectra_data: SpectrometryData, energy_range: Tuple[float, float]) -> PeakFitResult:
         """
         Fit a Gaussian peak with linear background in the specified energy range.
@@ -68,12 +80,23 @@ class PeakFitter:
         y = counts_arr[mask]
 
         # try decrease fit convergence time by providing somewhat reasonable initial guesses for the parameters
-        m_0 = 0 
+        m_0 = 0
         b_0 = np.mean(y)
-        amp_0 = np.max(y) * (x[1] - x[0])
-        mu_0 = energy_range[0] + (energy_range[1] - energy_range[0]) / 2
+        mu_0 = x[np.argmax(y)]
         sigma_0 = (energy_range[1] - energy_range[0]) / 6
-        popt, pcov = curve_fit(linear_gaussian_model, x, y, p0=[m_0, b_0, amp_0, mu_0, sigma_0])
+        peak_height_0 = max(0, np.max(y) - b_0)
+        amp_0 = peak_height_0 * sigma_0 * np.sqrt(2 * np.pi)
+
+        popt, pcov = curve_fit(
+            linear_gaussian_model,
+            x,
+            y,
+            p0=[m_0, b_0, amp_0, mu_0, sigma_0],
+            bounds=(
+                [-np.inf, -np.inf, 0,      energy_range[0], 0     ], # amp >= 0, sigma >= 0,  mu within fitting range
+                [ np.inf,  np.inf, np.inf, energy_range[1], np.inf],
+            ),
+        )
 
         # use uncertainties package to convert popt and pcov and preserve correlated uncertainties
         cv_u = unc.correlated_values(popt, pcov)
@@ -82,6 +105,15 @@ class PeakFitter:
 
         # Calculate area with uncertainty
         area = amp / (x[1] - x[0])
+
+        # check peak significance
+        snr = area.n / area.s
+        if snr < 3:
+            warnings.warn(
+                f"Poor peak significance for {spectra_data.original_file_name}: "
+                f"area = {area:.uS}, significance = {snr:.1f}σ",
+                RuntimeWarning,
+            )
 
         return PeakFitResult(
             area=area,
@@ -159,7 +191,7 @@ class PeakFitter:
         Returns
         -------
         list of Tuple[Tuple[float, float], PeakFitResult]
-            List containing the tuple of energy range and fit result for each processed peak
+            List containing the tuple of energy range (also a tuple) and fit result for each processed peak
         """
 
         # make sure file and parent folder exist
@@ -273,25 +305,20 @@ class PeakFitter:
                 continue
 
         # helper to save plots in parallel
-        def save_peak_plot(args: tuple[str, PeakFitResult]) -> None:
-            file, pf_res = args
-
-            plots_base_filename = ( f"{Path(file).name}_{int(pf_res.mu.n)}keV" )
-
-            plot_matplotlib(
-                pf_res,
-                save_path=os.path.join(plots_dir, f"{plots_base_filename}.pdf")
-            )
-
-        # start saving plots in parallel using ThreadPoolExecutor
         if save_plots:
-            with ThreadPoolExecutor(max_workers=4) as executor:
+            tasks = [
+                (file, pf_res, plots_dir)
+                for file, pf_res in results
+            ]
+            max_workers = min(8, os.cpu_count() or 1)  # use up to 8 workers or the number of CPUs available
+
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
                 list(
                     tqdm(
-                        executor.map(save_peak_plot, results),
-                        total=len(results),
-                        desc="peakfit - saving plots using ThreadPoolExecutor",
-                        disable=not verbose
+                        executor.map(save_peak_plot, tasks),
+                        total=len(tasks),
+                        desc=f"peakfit - saving plots using {max_workers} workers",
+                        disable=not verbose,
                     )
                 )
 
@@ -309,3 +336,5 @@ class PeakFitter:
         if verbose:
             print(f"peakfit - processed {len(results)} files and saved results to {output_dir}/{file_name}")
         return peakfit_results
+
+
