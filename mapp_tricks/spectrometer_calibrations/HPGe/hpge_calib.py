@@ -8,7 +8,7 @@ from uncertainties import ufloat, UFloat, Variable # type: ignore
 from uncertainties.umath import exp # type: ignore # pylint: disable=no-name-in-module
 import plotly.graph_objects as go # type: ignore
 
-from mapp_tricks.plotting import apply_my_plotly_style
+from ...plotting import apply_my_plotly_style
 
 # efficiency model: sum of (log(E)/E)**n terms up to n=5
 def efficiency_model(E, a0, a1, a2, a3, a4, a5):
@@ -83,11 +83,22 @@ class HPGeCalibration:
         row["parameters"] = np.array(ast.literal_eval(row["parameters"]))
         row["covariance_matrix"] = np.array(ast.literal_eval(row["covariance_matrix"]))
 
+        row["measured_efficiency_energy"] = np.array(ast.literal_eval(row["measured_efficiency_energy"]))
+        row["measured_efficiency_eff"] = np.array(ast.literal_eval(row["measured_efficiency_eff"]))
+        row["measured_efficiency_eff_error"] = np.array(ast.literal_eval(row["measured_efficiency_eff_error"]))
+
         return row
 
 
-    def plot_fit(self, name='') -> go.Figure:
-        x = np.linspace(self.df_row.energy_min, self.df_row.energy_max, 1000)  # keV, energy range for plotting
+    def get_plot(self) -> go.Figure:
+        """
+        Returns a plotly figure of the efficiency calibration fit with error bands.
+        """
+        x = np.linspace(
+            min(self.df_row.measured_efficiency_energy),
+            max(self.df_row.measured_efficiency_energy),
+            1000)  # keV, energy range for plotting
+        
         y = efficiency_model(x, *self.parameters)
         y_err = get_error_vector(x, self.covariance_matrix)
 
@@ -108,6 +119,18 @@ class HPGeCalibration:
             line=dict(color='rgba(255,255,255,0)'),
             hoverinfo="skip",
             showlegend=False,
+        ))
+        fig.add_trace(go.Scatter(
+            x=self.df_row.measured_efficiency_energy,
+            y=self.df_row.measured_efficiency_eff,
+            error_y=dict(
+                type='data',
+                array=self.df_row.measured_efficiency_eff_error,
+                visible=True
+            ),
+            mode='markers',
+            name='Measured efficiency',
+            marker=dict(color='black', size=8)
         ))
         fig.update_layout(
             title=f"Efficiency Calibration Fit for {self.detector_name} Level {self.level}",

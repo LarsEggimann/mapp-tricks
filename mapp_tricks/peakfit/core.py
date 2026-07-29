@@ -131,7 +131,14 @@ class PeakFitter:
             live_time=spectra_data.live_time
         )
     
-    def process_file(self, filepath: str, energy_range: Tuple[float, float], output_dir: str | None = None) -> PeakFitResult:
+    def process_file(self,
+                     filepath: str,
+                     energy_range: Tuple[float, float],
+                     save_plots: bool = True,
+                     save_results: bool = True,
+                     output_dir: str | None = None,
+                     verbose: bool = True
+                ) -> PeakFitResult:
         """
         Process a single spectrum file. This is a convenience method that wraps around process_folder to handle a single file by extracting the parent folder and file name.
 
@@ -161,6 +168,9 @@ class PeakFitter:
             energy_range=energy_range,
             output_dir=output_dir,
             file_pattern=file_name,
+            save_plots=save_plots,
+            save_results=save_results,
+            verbose=verbose,
         )
 
         # assert that we got exactly one result back wit assert

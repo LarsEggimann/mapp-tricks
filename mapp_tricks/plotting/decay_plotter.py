@@ -8,8 +8,6 @@ from scipy.optimize import curve_fit
 from mapp_tricks.plotting import apply_my_plotly_style
 from plotly.subplots import make_subplots
 
-from mapp_tricks.spectrometer_calibrations import HPGeCalibration
-
 # FIXME | TODO: cleanup this file, improve interface and make it more general for other isotopes, not just Tc99m
 
 half_life_99mTc = ufloat(6.0072, 0.0009) * 60 * 60  # type: ignore # 6.0072 hours in seconds
