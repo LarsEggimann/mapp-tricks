@@ -1,8 +1,6 @@
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import uncertainties.unumpy as unp
 
 def plot_exfor_cs_data(path_exfor_csv: str) -> tuple[go.Figure, pd.DataFrame]:
     exfor_data = pd.read_csv(path_exfor_csv)

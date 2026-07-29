@@ -181,3 +181,34 @@ def parse_srim_data_normalized(file_path):
     ]
 
     return pd.DataFrame(parsed_rows, columns=columns)
+
+
+def parse_iaea_monitor_reaction(file_path):
+    """Parse an IAEA monitor reaction data file.
+
+    Returns:
+        pd.DataFrame: Parsed IAEA monitor reaction data.
+    The expected columns in the DataFrame are:
+        - energy_MeV: Energy in MeV
+        - pade_fit_mb: Pade fit in millibarns
+        - pade_fit_uncertainty_mb: Uncertainty of the Pade fit in millibarns
+        - physical_energy_MeV: Physical energy in MeV, should be the same as energy_MeV
+        - physical_yield_MBq_uAh: Physical yield in MBq/uAh
+        - physical_yield_mCi_uAh: Physical yield in mCi/uAh
+        - physical_yield_1h_MBq_uA: Physical yield after 1 hour in MBq/uA
+        - physical_yield_saturation_MBq_uA: Physical yield at saturation in MBq/uA
+    """
+    columns = [
+        "energy_MeV",
+        "pade_fit_mb",
+        "pade_fit_uncertainty_mb",
+        "physical_energy_MeV",
+        "physical_yield_MBq_uAh",
+        "physical_yield_mCi_uAh",
+        "physical_yield_1h_MBq_uA",
+        "physical_yield_saturation_MBq_uA",
+    ]
+
+    df = pd.read_csv(file_path, sep="\\s+", comment="#", header=None, names=columns, skiprows=4)
+
+    return df

@@ -54,7 +54,12 @@ def do_cross_section_analysis(
     )
     cooling_time = (spectra_data.start_time - electrometer_data.end_of_beam).total_seconds()
 
-    calibration = HPGeCalibration(level=df_row.spectra_level, with_aluminum_foil=df_row.spectra_with_aluminum_foil)
+    calibration = HPGeCalibration(
+        detector_name='Akimov',
+        calibration_name='calibration_2018',
+        level=df_row.spectra_level,
+        with_aluminum_foil=df_row.spectra_with_aluminum_foil
+        )
 
 
     # check if the row has a value in Tc99m_bateman_AEoB_Bq colum we use it instead of calculating it
@@ -64,7 +69,7 @@ def do_cross_section_analysis(
     else:
         A_EoB = calibration.get_activity_for_peak_at_end_of_beam(
             peak_area=spectra_data.area,
-            peak_energy=spectra_data.centroid,
+            peak_energy=spectra_data.mu,
             life_time=spectra_data.live_time,
             real_time=spectra_data.real_time,
             cooling_time=cooling_time,
@@ -74,7 +79,7 @@ def do_cross_section_analysis(
 
     # A_start_of_spectra = calibration.get_activity_for_peak_at_start_of_measurement(
     #     peak_area=spectra_data.area,
-    #     peak_energy=spectra_data.centroid,
+    #     peak_energy=spectra_data.mu,
     #     life_time=spectra_data.live_time,
     #     real_time=spectra_data.real_time,
     #     branching_ratio=df_row.branching_ratio,

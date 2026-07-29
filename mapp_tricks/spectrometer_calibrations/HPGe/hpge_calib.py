@@ -150,7 +150,7 @@ class HPGeCalibration:
         energy: energy in keV
         """
         # if the energy is a ufloat, extract the nominal value
-        if isinstance(energy, Variable):
+        if isinstance(energy, Variable) or isinstance(energy, UFloat):
             energy = energy.n
         efficiency = efficiency_model(energy, *self.parameters)
         error_vector = get_error_vector(np.array([energy]), self.covariance_matrix)
