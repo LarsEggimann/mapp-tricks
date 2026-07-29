@@ -48,10 +48,13 @@ class PeakFitter:
     ----------
     timezone : ZoneInfo
         Timezone of the time strings in the spectrum files, default is "Europe/Zurich". This is used for converting strings to datetime objects.
+    use_multiprocessing : bool
+        Whether to use multiprocessing for saving plots, default is False. If True, it will use multiple processes to save plots in parallel, which can speed up the process for large datasets but also introduces more points of failure for diffrent systems, therefore the default is ThreadPoolExecutor which is more robust and works on all platforms.
     """
-    def __init__(self, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
+    def __init__(self, timezone: ZoneInfo = ZoneInfo("Europe/Zurich"), use_multiprocessing: bool = False):
         self.timezone: ZoneInfo = timezone
-        
+        self.use_multiprocessing: bool = use_multiprocessing
+
     def fit_peak(self, spectra_data: SpectrometryData, energy_range: Tuple[float, float]) -> PeakFitResult:
         """
         Fit a Gaussian peak with linear background in the specified energy range.
@@ -322,13 +325,15 @@ class PeakFitter:
             ]
             max_workers = min(8, os.cpu_count() or 1)  # use up to 8 workers or the number of CPUs available
 
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # Use ProcessPoolExecutor for multiprocessing if specified, otherwise use ThreadPoolExecutor
+            executor_class = ProcessPoolExecutor if self.use_multiprocessing else ThreadPoolExecutor
+
+            with executor_class(max_workers=max_workers) as executor:
                 list(
                     tqdm(
                         executor.map(save_peak_plot, tasks),
                         total=len(tasks),
                         desc=f"peakfit - saving plots using {max_workers} workers",
-                        disable=not verbose,
                     )
                 )
 
