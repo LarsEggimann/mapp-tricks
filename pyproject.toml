@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mapp_tricks"
-version = "0.1.16"
+version = "0.1.17"
 authors = [
     {name = "Lars Eggimann", email = "lars.eggimann@gmail.com"},
 ]
