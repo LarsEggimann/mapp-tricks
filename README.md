@@ -1,5 +1,5 @@
 # mapp-tricks package
-Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern. It has several modules, *some* of which are explained below. The other modules I figured are too specific and probably not useful for others, but feel free to explore them.
+Reusable code developed during my PhD in the Medical Applications of Particle Physics (MAPP) group at the University of Bern. It has several modules, *some* of which are explained below. The other modules I figured are too specific and probably not useful for others. Also I do not perform extensive testing and validation of the code, so please use at your own risk. I sometimes change modules and functions without notice.
 
 Please note that the documentation is by no means complete - you will find much undocumented functions, variables and classes in the code. If you have questions feel free to contact me. I only documented the parts that were used by colleagues or students.
 
@@ -9,15 +9,24 @@ Use at your own risk!
 - Lars Eggimann
 
 ## Usage of HPGeCalibration
+The `HPGeCalibration` module provides a convenient tool to evaluate the efficiency of our two HPGe detectors (Nicknamed Akimov and Toptunov). It has some useful formulas to calculate the activity of a peak at the end of the beam or at the start of measurement.
 
-Importing:
-```python
-from mapp_tricks.spectrometer_calibrations import HPGeCalibration
+At moment there these calibration keys:
+```
+calibration_2018: Full calibration for Akimov only, including level 0-10 with and without aluminum foil, created in 2018
+calibration_2025: Partial calibration data for Akimov, only level 1 ,2, 9 and 10 were measured with alu foil, created end of 2025,
 ```
 
 Basic usage for directly getting the activity at the end of the beam:
 ```python
-calibration = HPGeCalibration(level=1, with_aluminum_foil=True)
+from mapp_tricks.spectrometer_calibrations import HPGeCalibration
+
+calibration = HPGeCalibration(
+    detector_name='Akimov',
+    calibration_name='calibration_2018',
+    level=1,
+    with_aluminum_foil=True
+)
 
 A_EoB = calibration.get_activity_for_peak_at_end_of_beam(
     peak_area=...,
@@ -57,7 +66,7 @@ print(f"Activity at start of measurement: {A_SoM:.3f} Bq")
 
 You can also show the fit to visually verify the calibration:
 ```python
-calibration.plot_fit()
+calibration.get_plot().show()
 ```
 
 ## Usage of X-ray Spectrometer Efficiency Calibration
