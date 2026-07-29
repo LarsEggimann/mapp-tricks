@@ -44,16 +44,20 @@ def get_error_vector(x, cov_beta):
 
 # create a structure to hold the calibration paths and their associated names
 calibration_data = {
-    "calibration_2026": {
-        "description": "Calibration data for Akimov, no alu foil only, created Janary 2026",
-        "path": Path(__file__).parent / "calibration_data/processed_data/calib_2026/efficiency_calibration_results.csv",
+    "calibration_2025": {
+        "description": "Partial calibration data for Akimov, only level 1 ,2, 9 and 10 were measured with alu foil, created end of 2025",
+        "path": Path(__file__).parent / "calibrations/calibration_2025.csv",
+    },
+    "calibration_2018": {
+        "description": "Full calibration for Akimov, including level 0-10 with and without aluminum foil, created in 2018",
+        "path": Path(__file__).parent / "calibrations/calibration_2018.csv",
     }
 }
 
 class HPGeCalibration:
     def __init__(self,
                  detector_name: Literal['Akimov', 'Toptunov'],
-                 level: int, calibration_name: Literal["calibration_2026"],
+                 level: int, calibration_name: Literal["calibration_2025", "calibration_2018"],
                  with_aluminum_foil: bool = False
                  ):
         self.detector_name = detector_name
@@ -133,7 +137,7 @@ class HPGeCalibration:
             marker=dict(color='black', size=8)
         ))
         fig.update_layout(
-            title=f"Efficiency Calibration Fit for {self.detector_name} Level {self.level}",
+            title=f"Efficiency Calibration using {self.calibration_name} for {self.detector_name}, level {self.level}, with aluminum foil: {self.with_aluminum_foil}",
             xaxis_title="Energy [keV]",
             yaxis_title="Efficiency",
         )
@@ -160,6 +164,7 @@ class HPGeCalibration:
         print(f"Detector: {self.detector_name}")
         print(f"Level: {self.level}")
         print(f"With Aluminum Foil: {self.with_aluminum_foil}")
+        print(f"Calibration: {self.calibration_name}, Description: {calibration_data[self.calibration_name]['description']}")
         params_unc = uncertainties.correlated_values(self.parameters, self.covariance_matrix)
         print(f"Parameters: {params_unc}")
 

@@ -1,4 +1,5 @@
-recursive-include mapp_tricks/spectrometer_calibrations/HPGe/calibration-data *.csv
+recursive-include mapp_tricks/spectrometer_calibrations/HPGe/calibration_data *.csv
+recursive-include mapp_tricks/spectrometer_calibrations/HPGe/calibrations *.csv
 recursive-include mapp_tricks/spectrometer_calibrations/x_ray/calibration-data *.txt
 recursive-include mapp_tricks/spectrometer_calibrations/x_ray/calibration-data *.csv
 recursive-include mapp_tricks/film_analyzer *.json
