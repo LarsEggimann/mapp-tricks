@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from typing import Optional
+from scipy.interpolate import interp1d
 from uncertainties import ufloat_fromstr, UFloat, Variable # type: ignore
 import pandas as pd # type: ignore
 
@@ -82,9 +84,6 @@ def convert_color_hex_to_rgba(hex_color: str) -> str:
         a = 1.0
         
     return f"rgba({r}, {g}, {b}, {a})"
-
-
-
 
 def parse_srim_data_normalized(file_path):
     """Parse SRIM data file and normalize the values to standard units (MeV for energy and cm for length).
@@ -182,6 +181,24 @@ def parse_srim_data_normalized(file_path):
 
     return pd.DataFrame(parsed_rows, columns=columns)
 
+def interpolate_srim_data(df: pd.DataFrame) -> Callable:
+    """Interpolate SRIM data, return a function that can be used to get stopping power at any energy within the range of the data.
+    Args:
+        df (pd.DataFrame): DataFrame containing SRIM data with columns 'Energy_MeV' and 'dE/dx_Total'. According to `parse_srim_data_normalized`,
+    Returns:
+        Callable: A function that takes an energy value (or array of values) in MeV and returns the interpolated stopping power in MeV/(mg/cm²).
+    """
+    
+    # create an interpolation function
+    interp_func = interp1d(
+        df["Energy_MeV"],
+        df["dE/dx_Total"],
+        kind="linear",
+        fill_value="extrapolate",
+    )
+
+    return interp_func
+
 
 def parse_iaea_monitor_reaction(file_path):
     """Parse an IAEA monitor reaction data file.
@@ -209,6 +226,6 @@ def parse_iaea_monitor_reaction(file_path):
         "physical_yield_saturation_MBq_uA",
     ]
 
-    df = pd.read_csv(file_path, sep="\\s+", comment="#", header=None, names=columns, skiprows=4)
+    df = pd.read_csv(file_path, sep="\\s+", comment="#", header=None, names=columns, skiprows=5)
 
     return df
