@@ -40,8 +40,8 @@ def get_activity_at_end_of_beam_with_known_cross_section(cross_section: ufloat, 
 
     decay_constant = np.log(2) / half_life  # decay constant [1/s]
     A_EoB = _get_activity_at_end_of_beam_with_known_cross_section_assume_no_decay(cross_section, half_life, integrated_charge, target_mass, molar_mass, isotopic_abundance, n_sto, collimator_area)
-    f_c = decay_constant * t_irradiation / (1 - exp(-decay_constant * t_irradiation))  # adjust for the irradiation time
-    return A_EoB * f_c
+    f_c = decay_constant * t_irradiation / (1 - exp(-decay_constant * t_irradiation))  # adjust for the irradiation time, assume constant production rate (stable beam)
+    return A_EoB / f_c
 
 def get_activity_at_end_of_beam_with_known_cross_section_with_integrated_correction_factor(cross_section: ufloat, half_life, integrated_charge, target_mass, molar_mass, isotopic_abundance, n_sto, collimator_area, integrated_correction_factor) -> ufloat:
     """
@@ -59,7 +59,7 @@ def get_activity_at_end_of_beam_with_known_cross_section_with_integrated_correct
     """
 
     A_EoB = _get_activity_at_end_of_beam_with_known_cross_section_assume_no_decay(cross_section, half_life, integrated_charge, target_mass, molar_mass, isotopic_abundance, n_sto, collimator_area)
-    return A_EoB * integrated_correction_factor  # adjust for the irradiation time
+    return A_EoB / integrated_correction_factor  # adjust for the irradiation time
 
 def _get_cross_section_assume_no_decay(activity_at_end_of_beam: ufloat, half_life, integrated_charge, target_mass, molar_mass, isotopic_abundance, n_sto, collimator_area):
     """

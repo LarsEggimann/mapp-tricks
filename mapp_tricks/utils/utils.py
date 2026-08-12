@@ -62,7 +62,7 @@ def store_csv(df: pd.DataFrame, filename: str, ufloat_format: str = 'precision')
                 if ufloat_format == 'precision':
                     df.at[index, col] = f"{ufloat_val.nominal_value}+/-{ufloat_val.std_dev}"
                 elif ufloat_format == 'bracket':
-                    df.at[index, col] = f"{ufloat_val:.2uS}"
+                    df.at[index, col] = f"{ufloat_val:.uS}"
     df.to_csv(filename, index=False)
 
 
