@@ -18,7 +18,7 @@ def plot_exfor_cs_data(path_exfor_csv: str) -> tuple[go.Figure, pd.DataFrame]:
         exfor_data,
         x='x2(MeV)',
         y='y',
-        labels={'x2(MeV)': 'Energy [MeV]', 'y': 'Cross Section [barn]'},
+        labels={'x2(MeV)': 'Energy [MeV]', 'y': 'Cross Section [b]'},
         error_x='dx2(MeV)',
         error_y='dy',
         color='author_year',
@@ -27,8 +27,14 @@ def plot_exfor_cs_data(path_exfor_csv: str) -> tuple[go.Figure, pd.DataFrame]:
 
     fig.update_layout(
         xaxis_title='Energy [MeV]',
-        yaxis_title='Cross Section [barn]',
+        yaxis_title='Cross Section [b]',
         legend_title='Authors',
+    )
+
+    # increase marker size and make them more transparent
+    fig.update_traces(
+        marker=dict(size=8),
+        selector=dict(mode='markers')
     )
 
     return fig, exfor_data

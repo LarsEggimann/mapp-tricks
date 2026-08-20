@@ -24,7 +24,7 @@ my_plotly_theme.layout.update(
     height=450,
     font=dict(
         family="Computer Modern",
-        size=20,
+        size=22,
         color=text_color
     ),
     xaxis=dict(
@@ -40,6 +40,8 @@ my_plotly_theme.layout.update(
         showgrid=True,
         gridcolor=grid_color,
         gridwidth=1,
+
+        tickfont=dict(size=22),
     ),
     yaxis=dict(
         zeroline=False,
@@ -54,6 +56,8 @@ my_plotly_theme.layout.update(
         showgrid=True,
         gridcolor=grid_color,
         gridwidth=1,
+
+        tickfont=dict(size=22),
     ),
 )
 
