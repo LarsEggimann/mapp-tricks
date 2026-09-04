@@ -52,6 +52,10 @@ calibration_data = {
         "description": "Full calibration for Akimov, including level 0-10 with and without aluminum foil, created in 2018",
         "path": Path(__file__).parent / "calibrations/calibration_2018.csv",
     },
+    "partial_calibration_2026": {
+        "description": "Partial calibration for Toptunov, only level 1, 2, 4, and 10, created in 2026.",
+        "path": Path(__file__).parent / "calibrations/partial_calibration_2026.csv",
+    },
     "temp_calibration_2026": {
         "description": "Temporary calibration for Toptunov, only level 2, created in 2026.",
         "path": Path(__file__).parent / "calibrations/temp_calibration_2026.csv",
@@ -62,7 +66,7 @@ class HPGeCalibration:
     def __init__(self,
                  detector_name: Literal['Akimov', 'Toptunov'],
                  level: int,
-                 calibration_name: Literal["calibration_2025", "calibration_2018", "temp_calibration_2026"],
+                 calibration_name: Literal["calibration_2025", "calibration_2018", "partial_calibration_2026", "temp_calibration_2026"],
                  with_aluminum_foil: bool = False
                  ):
         self.detector_name = detector_name
