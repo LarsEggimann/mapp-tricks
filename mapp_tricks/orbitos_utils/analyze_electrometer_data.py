@@ -40,7 +40,8 @@ class ElectrometerDataAnalyzer:
         self.df = pd.read_csv(self.path_to_csv)
         if self.df is None or self.df.empty:
             raise ValueError(f"Failed to read data from {self.path_to_csv} or file is empty.")
-        # convert timestamps to datetime, careful here we create objects in local timezone, be careful when comparing with other datetimes
+        
+        # convert timestamps to datetime, we create objects in the specified timezone, be careful when comparing with other datetimes
         self.df['datetime'] = [datetime.fromtimestamp(ts, tz=timezone) for ts in self.df['timestamp']]
 
         # debug variables
