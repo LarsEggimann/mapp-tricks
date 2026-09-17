@@ -152,10 +152,10 @@ def parse_srim_data_normalized(file_path):
         total_loss = elec_loss + nuc_loss
 
         # convert everything into standard normalized units (MeV and cm)
-        energy_mev = energy_val * energy_to_mev.get(energy_unit, 1.0)
-        range_cm = range_val * length_to_cm.get(range_unit, 1.0)
-        long_strag_cm = long_strag_val * length_to_cm.get(long_strag_unit, 1.0)
-        lat_strag_cm = lat_strag_val * length_to_cm.get(lat_strag_unit, 1.0)
+        energy_mev = energy_val * energy_to_mev[energy_unit]
+        range_cm = range_val * length_to_cm[range_unit]
+        long_strag_cm = long_strag_val * length_to_cm[long_strag_unit]
+        lat_strag_cm = lat_strag_val * length_to_cm[lat_strag_unit]
 
         parsed_rows.append(
             [
