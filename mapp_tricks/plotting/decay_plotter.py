@@ -53,6 +53,7 @@ def plot_decay_curve_with_fit(spectra_df: pd.DataFrame, target_name: str = "unkn
 
     a0, fitted_half_life = unc.correlated_values(popt, pcov)
 
+    print(f"Fitted parameters: count rate at t0 = {a0:.uS}, fitted half-life = {fitted_half_life/60:.uS} minutes")
     print(f"Fitted parameters: count rate at t0 = {a0:.uS}, fitted half-life = {fitted_half_life/3600:.uS} hours")
     print(f"data acquisition time: {(x_data.max() - x_data.min())/3600:.2f} hours")
     # print(f"Expected half-life: {half_life_99mTc/3600:.uS} hours")
