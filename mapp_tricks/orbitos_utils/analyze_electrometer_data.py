@@ -1,5 +1,6 @@
 import os
 from attr import dataclass
+from typing_extensions import Literal
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
 import plotly.graph_objects as go  # type: ignore
@@ -7,6 +8,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from uncertainties import ufloat, UFloat # type: ignore
 from uncertainties import unumpy as unp # type: ignore
+from scipy.signal import medfilt # type: ignore
 
 from ..plotting.plotly_styler import apply_my_plotly_style
 
@@ -28,11 +30,32 @@ class BeamData:
                 f"t_irradiation={self.t_irradiation} seconds, "
                 f"integrated_charge={self.integrated_charge}, average_current={self.average_current})")
 
+# taken from www.keysight.com/us/en/assets/7018-04484/data-sheets/5991-4878.pdf (page 16)
+ELECTROMETER_ACCURACY = {
+    '2pA':   (0.01,   3e-15),   # 1%    + 3   fA
+    '20pA':  (0.005,  3e-15),   # 0.5%  + 3   fA
+    '200pA': (0.005,  5e-15),   # 0.5%  + 5   fA
+    '2nA':   (0.002,  300e-15), # 0.2%  + 300 fA
+    '20nA':  (0.002,  500e-15), # 0.2%  + 500 fA
+    '200nA': (0.002,  5e-12),   # 0.2%  + 5   pA
+    '2uA':   (0.001,  50e-12),  # 0.1%  + 50  pA
+    '20uA':  (0.0005, 500e-12), # 0.05% + 500 pA
+    '200uA': (0.0005, 5e-9),    # 0.05% + 5   nA
+    '2mA':   (0.0005, 50e-9),   # 0.05% + 50  nA
+    '20mA':  (0.0005, 500e-9),  # 0.05% + 500 nA
+}
 
 class ElectrometerDataAnalyzer:
-    def __init__(self, path_to_csv: str, beam_threshold: float = 400e-12, timezone: ZoneInfo = ZoneInfo("Europe/Zurich")):
+    def __init__(self,
+                 path_to_csv: str,
+                 beam_threshold: float = 400e-12,
+                 electrometer_range_mode: Literal['2pA', '20pA', '200pA', '2nA', '20nA', '200nA', '2uA', '20uA', '200uA', '2mA', '20mA'] = '2uA',
+                 timezone: ZoneInfo = ZoneInfo("Europe/Zurich")
+                 ):
+        
         self.path_to_csv = path_to_csv
         self.beam_threshold = beam_threshold
+        self.electrometer_range_mode = electrometer_range_mode
         self.plot = None
         self.beam_data: BeamData | None = None
         if not os.path.exists(self.path_to_csv):
@@ -58,8 +81,8 @@ class ElectrometerDataAnalyzer:
 
         beam_indices = self.df.index[beam_mask]
         if len(beam_indices) > 0:
-            self._beam_start_idx = beam_indices[0]
-            self._beam_end_idx = beam_indices[-1]
+            self._beam_start_idx = beam_indices[0] - 1
+            self._beam_end_idx = beam_indices[-1]  + 1
             self.beam_start_time = self.df.loc[self._beam_start_idx, 'datetime']
             self.beam_end_time = self.df.loc[self._beam_end_idx, 'datetime']
         else:
@@ -76,36 +99,47 @@ class ElectrometerDataAnalyzer:
             beam_on_mask = (self.df['datetime'] >= self.beam_start_time) & (self.df['datetime'] <= self.beam_end_time)
             beam_currents = self.df['current'][beam_on_mask]
             beam_timestamps = self.df['timestamp'][beam_on_mask]
-            
-            total_charge = np.trapezoid(beam_currents, beam_timestamps)
-            
-            # instrumental baseline noise (1-second window right before beam start)
-            noise_mask = (self.df['datetime'] >= self.beam_start_time - pd.Timedelta(seconds=1)) & (self.df['datetime'] < self.beam_start_time)
-            noise_currents = self.df['current'][noise_mask]
-            
-            # fallback hierarchy if no data points exist in that exact 1-second pre-beam window
-            if len(noise_currents) > 1:
-                sigma_noise = np.std(noise_currents)
-            else:
-                # fallback
-                all_pre_beam = self.df['current'][self.df['datetime'] < self.beam_start_time]
-                if len(all_pre_beam) > 1:
-                    sigma_noise = np.std(all_pre_beam)
-                else:
-                    # fallback more
-                    sigma_noise = np.std(beam_currents)
-            
-            # propagate integrated charge in quadrature
-            N = len(beam_currents)
-            if N > 0 and t_irradiation.n > 0:
-                delta_t = t_irradiation.n / N
-                charge_uncertainty = delta_t * np.sqrt(N) * sigma_noise
-            else:
-                charge_uncertainty = 0.0
+
+            # noise calculation during beam-on period using a median filter to remove spikes and then calculating the standard deviation of the residuals
+            filtered_currents = medfilt(beam_currents, kernel_size=15)
+            # remove values that are more than 3 sigma away from the median filtered values to avoid spikes affecting the noise calculation
+            std_raw = np.std(beam_currents - filtered_currents)
+            outlier_mask = np.abs(beam_currents - filtered_currents) <= 3 * std_raw
+            filtered_currents_outliers_removed = filtered_currents[outlier_mask]
+            sigma_noise_beam = np.std(beam_currents[outlier_mask] - filtered_currents_outliers_removed)
+
+            # accuracy of the electrometer, based on the range mode (from datasheet)
+            relative_accuracy, offset_accuracy = ELECTROMETER_ACCURACY[self.electrometer_range_mode]
+            accuracies = (relative_accuracy * np.abs(beam_currents) + offset_accuracy)
+
+            # the total uncertainty in the current measurements is the quadrature sum of the noise and the accuracy
+            sigma_currents = np.sqrt(sigma_noise_beam**2 + accuracies**2)
+
+            # print mean sigmas and accuracy for debugging
+            # print(f"Mean noise uncertainty (medfilt):  {sigma_noise_beam:.2e} A,\n"
+            #       f"Mean accuracy uncertainty:         {np.mean(accuracies):.2e} A,\n"
+            #       f"Mean total uncertainty:            {np.mean(sigma_currents):.2e} A"
+            #     )
+
+            timestamps = beam_timestamps.to_numpy()
+            currents = beam_currents.to_numpy()
+
+            total_charge = np.trapezoid(currents, timestamps)
+            dt = np.diff(timestamps)
+
+            # # weights are the amount of time for which each current data point contributes to the trapezoidal integral
+            weights = np.empty(len(currents))
+            weights[0]    = dt[0]  / 2 # first and last points only contribute half the time interval according to the trapezoidal rule
+            weights[-1]   = dt[-1] / 2
+            weights[1:-1] = (dt[:-1] + dt[1:]) / 2 # all other points contribute the full time interval between the two neighboring points
+
+            # then the uncertainty in the integrated charge is the quadrature sum of the uncertainties in each current measurement, weighted by the time interval they contribute to the integral
+            # scale by N-1 to make sure the uncertainty does not decrease with more measurements, since the uncertainty in the current is not statistical but systematic (instrumental noise and accuracy)
+            charge_uncertainty =  np.sqrt((len(weights)-1) * np.sum((weights * sigma_currents)**2))
 
             integrated_charge = ufloat(total_charge, charge_uncertainty)
             
-            # average current (uncertanty propagates automatically via I = Q / t)
+            # average current (uncertainty propagates automatically via I = Q / t)
             if t_irradiation.n > 0:
                 average_current = integrated_charge / t_irradiation
             else:
@@ -135,6 +169,15 @@ class ElectrometerDataAnalyzer:
                 line=dict(color='red', width=2)
             ))
 
+            # plot the median filtered current in black
+            fig.add_trace(go.Scatter(
+                x=self.df['datetime'][beam_on_mask][outlier_mask],
+                y=filtered_currents_outliers_removed,
+                mode='lines',
+                name='Median Filtered Current',
+                line=dict(color='black', width=2, dash='dot')
+            ))
+
         # horizontal line for beam threshold
         fig.add_hline(
             y=self.beam_threshold,
@@ -154,21 +197,17 @@ class ElectrometerDataAnalyzer:
             height=600
         )
 
-        # # apply transparent background
-        # fig.update_layout(
-        #     plot_bgcolor='rgba(0,0,0,0)',
-        #     paper_bgcolor='rgba(0,0,0,0)',
-        #     font=dict(color='black')
-        # )
-
         # grey grid lines
         fig.update_xaxes(showgrid=True, gridcolor='lightgray')
         fig.update_yaxes(showgrid=True, gridcolor='lightgray')
 
         # add relevant metadata to the plot
+        bst = self.beam_start_time.strftime("%Y-%m-%d %H:%M:%S") if self.beam_start_time is not None else "N/A"
+        bet = self.beam_end_time.strftime("%Y-%m-%d %H:%M:%S") if self.beam_end_time is not None else "N/A"
         fig.add_annotation(
-            text=f"Beam Start: {self.beam_start_time}\nBeam End: {self.beam_end_time}\n"
-                 f"Integrated Charge: {integrated_charge:.2e} C",
+            text=f"Integrated Charge: {integrated_charge:.uS} C<br>"
+                 f"Beam Start:        {bst}<br>"
+                 f"Beam End:          {bet}",
             xref="paper", yref="paper",
             x=0.05, y=0.90,
             showarrow=False,
@@ -211,8 +250,6 @@ class ElectrometerDataAnalyzer:
         - end_of_beam: The end time of the beam (optional).
         - show_plot: Whether to show a plot of the correction factor over time (optional).
 
-        The Math:
-        f(t) = \frac{\int_0^t P(t')\,dt'}{e^{-\lambda t}\int_0^t e^{\lambda t'} P(t')\,dt'}
         """
         if self.beam_data is None:
             raise ValueError("Beam data not analyzed yet. Call analyze_beam_data() first.")
