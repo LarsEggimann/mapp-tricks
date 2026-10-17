@@ -8,11 +8,6 @@ from ..peakfit import PeakFitter
 from ..orbitos_utils import ElectrometerDataAnalyzer, BeamData
 from ..spectrometer_calibrations import HPGeCalibration
 
-class CrossSectionAnalysisResults:
-    def __init__(self, activity_end_of_beam: ufloat, cross_section: ufloat):
-        self.activity_end_of_beam = activity_end_of_beam  # in Bq
-        self.cross_section = cross_section  # in barn
-
 def do_cross_section_analysis(
     df: pd.DataFrame,
     row_condition
