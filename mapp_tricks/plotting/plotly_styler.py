@@ -23,7 +23,7 @@ my_plotly_theme.layout.update(
     width=850,
     height=450,
     font=dict(
-        family="Computer Modern",
+        family="AVHershey Complex", # before: Computer Modern
         size=22,
         color=text_color
     ),

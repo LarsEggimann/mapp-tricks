@@ -160,7 +160,7 @@ class ElectrometerDataAnalyzer:
 
         # highlight beam-on region if it exists
         if self.beam_start_time is not None:
-            beam_data = self.df[beam_mask]
+            beam_data = self.df[beam_on_mask]
             fig.add_trace(go.Scatter(
                 x=beam_data['datetime'],
                 y=beam_data['current'],
