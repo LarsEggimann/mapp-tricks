@@ -262,6 +262,13 @@ class ElectrometerDataAnalyzer:
             start_of_beam = self.beam_data.start_of_beam
         if end_of_beam is None:
             end_of_beam = self.beam_data.end_of_beam
+
+        # if start_of_beam or end_of_beam is None, raise a Warning and perform self.analyze_beam_data() to get the beam start and end times
+        if start_of_beam is None or end_of_beam is None:
+            print("Warning: start_of_beam or end_of_beam is None. Performing analyze_beam_data() to get the beam start and end times.")
+            self.analyze_beam_data(save_plot=False)
+            start_of_beam = self.beam_data.start_of_beam
+            end_of_beam = self.beam_data.end_of_beam
     
         data = self.df[(self.df['datetime'] >= start_of_beam) & (self.df['datetime'] <= end_of_beam)]
 
