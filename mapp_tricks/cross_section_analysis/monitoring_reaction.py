@@ -20,6 +20,7 @@ class MonitoringReaction:
     half_life: UFloat  # seconds
     molar_mass: UFloat | None = None  # g/mol, not used for natural compositions
     isotopic_abundance: UFloat | None = None  # as fraction, not used for natural compositions
+    scale_factor: float = 1.0  # scale factor debugging
 
 monitoring_reactions_dict = {
 
@@ -55,7 +56,8 @@ def calculate_Q_per_cm2(
         particle_energy_distributions: list[tuple[np.ndarray, np.ndarray]] | None = None,
         end_of_beam_time: datetime | None = None,
         electrometer_data_analyzer: ElectrometerDataAnalyzer | None = None,
-        irradiation_time: float | None = None
+        irradiation_time: float | None = None,
+        verbose: bool = False
 ):
     """
     Calculate the charge per cm^2 from a given spectrum file and a monitoring reaction.
@@ -75,11 +77,13 @@ def calculate_Q_per_cm2(
     particle_energy_distributions : list[tuple[np.ndarray, np.ndarray]] | None, optional
         A list of tuples, each containing two numpy arrays: the first array is the energy values in MeV, and the second array is the corresponding probability density values. If None, the particle_energy_MeV must be provided.
     end_of_beam_time : datetime | None, optional
-        The time at the end of the beam, used to calculate cooling time. If None, no decay correction is applied.
+        The time at the end of the beam, used to calculate cooling time. If None, we try to get it from the electrometer data analyzer. If that fails, no decay correction is applied.
     electrometer_data_analyzer : ElectrometerDataAnalyzer | None, optional
         The electrometer data analyzer to used to get the integrated correction factor for the beam. If None, no decay correction is applied.
     irradiation_time : float | None, optional
         Irradiation time in seconds. If None, no decay correction is applied.
+    verbose : bool, optional
+        If True, print additional information during the calculation.
 
     Returns
     -------
@@ -106,18 +110,25 @@ def calculate_Q_per_cm2(
     )
 
     # cooling time
+    if end_of_beam_time is None and electrometer_data_analyzer is not None:
+        # if no end_of_beam_time is provided, but an electrometer_data_analyzer is provided, we can use the eob from the electrometer data analyzer to calculate the cooling time
+        end_of_beam_time = electrometer_data_analyzer.beam_end_time
+        if verbose:
+            print(f"Using end_of_beam_time from electrometer_data_analyzer: {end_of_beam_time}")
+
     cooling_time = None
     if end_of_beam_time is not None:
         spectra_start_time = pres[0][1].start_time  # assuming all peaks are from the same spectrum, so they have the same start time
+        cooling_time = (spectra_start_time - end_of_beam_time).total_seconds()
         eob_time_offset = end_of_beam_time.utcoffset()
         ss_time_offset = spectra_start_time.utcoffset()
-        print(f"end_of_beam_time: {end_of_beam_time}, utcoffset: {eob_time_offset}")
-        print(f"spectra_start_time: {spectra_start_time}, utcoffset: {ss_time_offset}")
+        if verbose:
+            print(f"end_of_beam_time: {end_of_beam_time}, utcoffset: {eob_time_offset}")
+            print(f"spectra_start_time: {spectra_start_time}, utcoffset: {ss_time_offset}")
         # assert eob_time_offset == ss_time_offset, (
         #     f"Timezone offset mismatch! end_of_beam_time ({eob_time_offset}) and spectra_start_time ({ss_time_offset}) do not match. "
         #      "Ensure both datetime objects are in the same timezone."
         # )
-        cooling_time = (spectra_start_time - end_of_beam_time).total_seconds()
     else:
         print("Warning: end_of_beam_time is None, no cooling time will be used for decay correction.")
 
@@ -159,12 +170,15 @@ def calculate_Q_per_cm2(
     sum = 0
     for A_EoB in A_EoB_list:
         sum += A_EoB
-        print(f"Activity at end of beam for peak {A_EoB:.uS} Bq")
+        if verbose:
+            print(f"Activity at end of beam for peak {A_EoB:.uS} Bq")
     A_EoB_avg = sum / len(A_EoB_list)
 
     sum = 0
     for A_SoM in A_SoM_list:
         sum += A_SoM
+        if verbose:
+            print(f"Activity at start of measurement for peak {A_SoM:.uS} Bq")
     A_SoM_avg = sum / len(A_SoM_list)
 
     # calculate the number of target atoms
@@ -189,7 +203,7 @@ def calculate_Q_per_cm2(
         # raise NotImplementedError("Energy distribution handling is not yet implemented. Please provide a single particle_energy_MeV for now.")
         # build the matrix of flux_i_j where i is the energy bin and j is the depth step into the foil
         # at the moment we assume two depth steps j, E_in and E_out, we assume the cross section changes linearly between these two energies, so we can just take the average cross section between E_in and E_out
-        
+
         # particle_energy_distributions:
         # list of (energy_MeV, phi), where phi is the fluence per energy bin
         # All distributions use the same energy grid and bin boundaries.
@@ -229,7 +243,7 @@ def calculate_Q_per_cm2(
 
     _lambda = np.log(2) / reaction.half_life  # decay constant in 1/s
 
-    Q_per_cm2 = (A_EoB_avg * q) / (N_t * sigma * _lambda)
+    Q_per_cm2 = (A_EoB_avg * q) / (N_t * (sigma * reaction.scale_factor) * _lambda)
 
     if electrometer_data_analyzer is not None and irradiation_time is not None:
         raise ValueError("Both electrometer_data_analyzer and irradiation_time are provided. Either you assume constant beam (irradiation_time) or a variable beam (electrometer_data_analyzer). Please provide only one or none.")
@@ -241,20 +255,20 @@ def calculate_Q_per_cm2(
         decay_correction_factor = 1 - np.exp(-_lambda * irradiation_time)
         Q_per_cm2 /= decay_correction_factor
 
-    print(f"\nMonitoring reaction: {monitoring_reaction}")
-    print(f"Monitor activity: {A_EoB_avg}")
-    print(f"Start-of-measurement activity: {A_SoM_avg}")
-    # print(f"Monitor foil mass: {monitoring_foil_mass}")
-    # print(f"Monitor molar mass: {reaction.molar_mass}")
-    # print(f"Monitor atoms N_t: {N_t}")
-    print(f"Monitor cross section: {sigma / 1e-24:.6g} barn")
-    # print(f"Monitor decay constant: {_lambda:.6g} 1/s")
-    # print(f"Calculated Q/cm²: {Q_per_cm2}")
+    if verbose:
+        print(f"\nMonitoring reaction: {monitoring_reaction}")
+        print(f"Monitor activity: {A_EoB_avg} Bq")
+        print(f"Start-of-measurement activity: {A_SoM_avg} Bq")
+        print(f"Monitor foil mass: {monitoring_foil_mass} g")
+        print(f"Monitor molar mass: {reaction.molar_mass} g/mol")
+        print(f"Monitor atoms N_t: {N_t}")
+        print(f"Monitor cross section: {sigma / 1e-24:.6g} barn")
+        print(f"Monitor decay constant: {_lambda:.6g} 1/s")
+        print(f"Calculated Q/cm²: {Q_per_cm2}")
 
-    # print("Monitor gamma activities:", A_EoB_list)
-    # print("Interpolated monitor cross section [mb]:", cs_interp_func(particle_energy_MeV.n))
-    # print("Monitor foil mass [g]:", monitoring_foil_mass)
-    # print("Monitor charge density [C/cm²]:", Q_per_cm2)
-    # print("correction_factor_f_c:", correction_factor_f_c)
+        print("Monitor gamma activities:", A_EoB_list)
+        print("Interpolated monitor cross section [mb]:", cs_interp_func(particle_energy_MeV.n))
+        print("Monitor foil mass [g]:", monitoring_foil_mass)
+        print("Monitor charge density [C/cm²]:", Q_per_cm2)
 
     return Q_per_cm2
